@@ -1,0 +1,10 @@
+[Unit]
+Description=Mominjection service
+After=multi-user.target
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/mominjection.sh
+
+[Install]
+WantedBy=multi-user.target
