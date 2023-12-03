@@ -1,0 +1,5 @@
+SRCREV = "391759a6334ed230506509b3f3518cfb93473935"
+
+RDEPENDS:${PN} += "\
+    momicalc \
+    "
