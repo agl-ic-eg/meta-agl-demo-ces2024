@@ -13,6 +13,9 @@
 				"/dev/mmcblk1p6"
 			]
 		},
+		"extended": {
+			"shmounts": "/opt/container/guests/agl-html5-ivi-demo/shmounts"
+		},
 		"lifecycle": {
 			"halt": "SIGRTMIN+3",
 			"reboot": "SIGTERM",

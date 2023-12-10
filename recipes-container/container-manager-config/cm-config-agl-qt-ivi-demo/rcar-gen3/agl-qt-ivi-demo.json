@@ -13,6 +13,9 @@
 				"/dev/mmcblk1p4"
 			]
 		},
+		"extended": {
+			"shmounts": "/opt/container/guests/agl-qt-ivi-demo/shmounts"
+		},
 		"lifecycle": {
 			"halt": "SIGRTMIN+3",
 			"reboot": "SIGTERM",
@@ -31,7 +34,7 @@
 		{
 			"type":		"cgroup",
 			"object":	"cpuset.cpus",
-			"value":	"1-7"
+			"value":	"0-6"
 		},
 		{
 			"type":		"prlimit",
@@ -154,7 +157,7 @@
 						},
 						"behavior": {
 							"injection": 1,
-							"devnode": 0,
+							"devnode": 1,
 							"allow": 1,
 							"permission": "rwm"
 						}

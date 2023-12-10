@@ -1,17 +1,20 @@
 {
-	"name": "agl-html5-ivi-demo",
+	"name": "agl-momi-ivi-demo-res",
 	"role": "ivi",
 	"base": {
 		"autoboot": false,
 		"bootpriority": 10,
 		"rootfs": {
-			"path": "/opt/container/guests/agl-html5-ivi-demo/rootfs",
+			"path": "/opt/container/guests/agl-momi-ivi-demo-res/rootfs",
 			"filesystem":	"ext4",
 			"mode":		"rw",
 			"blockdev": [
-				"/dev/mmcblk0p8",
-				"/dev/mmcblk0p8"
+				"/dev/mmcblk1p3",
+				"/dev/mmcblk1p3"
 			]
+		},
+		"extended": {
+			"shmounts": "/opt/container/guests/agl-momi-ivi-demo-res/shmounts"
 		},
 		"lifecycle": {
 			"halt": "SIGRTMIN+3",
@@ -27,6 +30,18 @@
 			"HOME=/home/root"
 		]
 	},
+	"resource": [
+		{
+			"type":		"cgroup",
+			"object":	"cpuset.cpus",
+			"value":	"1-6"
+		},
+		{
+			"type":		"prlimit",
+			"object":	"rtprio",
+			"value":	"50"
+		}
+	],
 	"fs": {
 		"mount": [
 			{
@@ -59,13 +74,6 @@
 			},
 			{
 				"type": 	"directory",
-				"from": 	"/run/pipewire/pipewire-0",
-				"to":		"var/pipewire-0",
-				"fstype":	"none",
-				"option": 	"bind,optional,create=file"
-			},
-			{
-				"type": 	"directory",
 				"from": 	"/run/dlt",
 				"to":		"run/dlt",
 				"fstype":	"none",
@@ -73,7 +81,7 @@
 			},
 			{
 				"type": 	"directory",
-				"from": 	"/opt/container/guests/agl-html5-ivi-demo/system.conf",
+				"from": 	"/opt/container/guests/agl-momi-ivi-demo/system.conf",
 				"to":		"etc/systemd/system.conf.d/10-environment.conf",
 				"fstype":	"none",
 				"option": 	"bind,optional,create=file"
@@ -99,11 +107,29 @@
 				"optional": 		1,
 				"wideallow": 	1,
 				"exclusive": 	0
+			},
+			{
+				"type": 		"devdir",
+				"from": 		"/dev/snd",
+				"to":			"dev/snd",
+				"devnode":		"/dev/snd/pcmC0D0p",
+				"optional": 		1,
+				"wideallow": 	1,
+				"exclusive": 	0
+			},
+			{
+				"type": 		"devnode",
+				"from": 		"/dev/pvr_sync",
+				"to":			"dev/pvr_sync",
+				"devnode":		"/dev/pvr_sync",
+				"optional": 		0,
+				"wideallow": 	0,
+				"exclusive": 	0
 			}
 		],
 		"dynamic": [
 			{
-				"devpath": "/devices/platform/scb/fd500000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/usb1/",
+				"devpath": "/devices/platform/soc/ee0a0100.usb/usb2/",
 				"items": [
 					{
 						"subsystem": "usb",
@@ -139,7 +165,7 @@
 				]
 			},
 			{
-				"devpath": "/devices/platform/scb/fd500000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/usb1/",
+				"devpath": "/devices/platform/soc/ee0a0100.usb/usb2/",
 				"items": [
 					{
 						"subsystem": "hid",
@@ -162,7 +188,7 @@
 			{
 				"type": 	"veth",
 				"param": {
-					"name":	"veth0",
+					"name":	"eth0",
 					"link":	"lxcbr0",
 					"flags":	"up",
 					"hwaddr":	"00:16:3e:xx:xx:xx",

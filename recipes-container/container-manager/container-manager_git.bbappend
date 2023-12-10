@@ -3,4 +3,4 @@ SRC_URI = " \
     file://container-manager.service \
     file://container-manager.json \
     "
-SRCREV = "7d89e3a0cf529a43cf6a76a394860e364457781e"
+SRCREV = "1958b8d5c490f9d9990c363e389fc733a6e94e64"

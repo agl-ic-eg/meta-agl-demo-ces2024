@@ -30,7 +30,7 @@
 		{
 			"type":		"cgroup",
 			"object":	"cpuset.cpus",
-			"value":	"1"
+			"value":	"0"
 		},
 		{
 			"type":		"prlimit",
