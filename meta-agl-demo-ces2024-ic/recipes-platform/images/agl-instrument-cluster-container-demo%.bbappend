@@ -10,6 +10,10 @@ IMAGE_INSTALL += " \
     cm-config-agl-momi-ivi-demo-res \
 "
 
+IMAGE_INSTALL += " \
+    virtio-loopback-driver \
+"
+
 IMAGE_INSTALL:remove = " \
     packagegroup-pipewire \
     pipewire-ic-ipc \
