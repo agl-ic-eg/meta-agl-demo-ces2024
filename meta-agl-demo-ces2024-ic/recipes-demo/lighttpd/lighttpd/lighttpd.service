@@ -9,7 +9,7 @@ ExecStartPre=/usr/sbin/lighttpd -tt -f /etc/lighttpd/lighttpd.conf
 ExecStart=/usr/sbin/lighttpd -D -f /etc/lighttpd/lighttpd.conf
 ExecReload=/bin/kill -USR1 $MAINPID
 Restart=on-failure
-CPUAffinity=0
+CPUAffinity=7
 
 [Install]
 WantedBy=multi-user.target
