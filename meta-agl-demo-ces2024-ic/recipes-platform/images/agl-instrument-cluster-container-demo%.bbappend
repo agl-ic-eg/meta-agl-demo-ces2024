@@ -21,3 +21,23 @@ IMAGE_INSTALL:remove = " \
 "
 
 IMAGE_FEATURES += " ssh-server-openssh"
+
+OUT_OF_TREE_CONTAINER_IMAGES ??= " \
+    agl-ivi-demo-platform \
+    agl-ivi-demo-platform-flutter \
+    agl-ivi-demo-platform-html5 \
+    agl-ivi-demo-platform-flutter-simple \
+"
+
+OUT_OF_TREE_CONTAINER_CONFIGS ??= " \
+    cm-config-agl-qt-ivi-demo \
+    cm-config-agl-flutter-ivi-demo \
+    cm-config-agl-html5-ivi-demo \
+"
+
+WKS_FILES:remove = " \
+    ${@oe.utils.conditional('OUT_OF_TREE_CONTAINER_IMAGE_DEPLOY_DIR', '', 'agl-ic-container-noloader.wks ', 'agl-ic-container-noloader-demo.wks ', d)} \
+"
+WKS_FILES:prepend = " \
+    ${@oe.utils.conditional('OUT_OF_TREE_CONTAINER_IMAGE_DEPLOY_DIR', '', 'agl-ic-container-noloader.wks ', 'agl-ic-container-noloader-demo-ext.wks ', d)} \
+"
