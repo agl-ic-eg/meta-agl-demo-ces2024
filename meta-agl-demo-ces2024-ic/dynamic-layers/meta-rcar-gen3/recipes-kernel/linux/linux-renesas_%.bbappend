@@ -1,6 +1,7 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
 SRC_URI += " \
+    file://defconfig \
     file://disable_rt_group.cfg \
     file://virtio_loopback.cfg \
 "
