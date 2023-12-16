@@ -11,7 +11,7 @@ IMAGE_INSTALL += " \
 "
 
 IMAGE_INSTALL += " \
-    virtio-loopback-driver \
+    kernel-module-virtio-loopback \
 "
 
 IMAGE_INSTALL:remove = " \
