@@ -1,0 +1,3 @@
+ccflags-y += -DMULTDEV
+
+obj-m += loopback_driver1.o
