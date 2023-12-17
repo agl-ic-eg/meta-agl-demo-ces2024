@@ -10,4 +10,5 @@ PACKAGES = "\
     "
 RDEPENDS:${PN} += " \
     kernel-module-virtio-sound-0 kernel-module-virtio-sound-1 \
+    virtio-loopback-adapter \
     "
