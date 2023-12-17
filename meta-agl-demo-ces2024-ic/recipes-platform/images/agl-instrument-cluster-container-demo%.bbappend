@@ -11,7 +11,7 @@ IMAGE_INSTALL += " \
 "
 
 IMAGE_INSTALL += " \
-    kernel-module-virtio-loopback \
+    packagegroup-virtio-loopback-sound \
 "
 
 IMAGE_INSTALL:remove = " \
