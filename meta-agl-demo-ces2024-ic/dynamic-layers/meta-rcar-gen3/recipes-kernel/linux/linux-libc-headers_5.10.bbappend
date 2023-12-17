@@ -10,11 +10,4 @@ SRC_URI += " \
     file://0007-ALSA-virtio-introduce-PCM-channel-map-support.patch \
     file://0008-ALSA-virtio-introduce-device-suspend-resume-support.patch \
     file://0009-Add-virtio-sound-id-in-virtio_ids.h-file.patch \
-    file://disable_rt_group.cfg \
-    file://virtio_loopback.cfg \
-    file://defconfig \
 "
-
-#AGL_KCONFIG_FRAGMENTS += "disable_rt_group.cfg virtio_loopback.cfg"
-AGL_KCONFIG_FRAGMENTS = ""
-KBUILD_DEFCONFIG = ""
