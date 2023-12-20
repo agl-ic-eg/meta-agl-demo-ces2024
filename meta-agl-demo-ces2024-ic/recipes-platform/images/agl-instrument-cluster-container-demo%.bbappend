@@ -33,6 +33,7 @@ OUT_OF_TREE_CONTAINER_CONFIGS ??= " \
     cm-config-agl-qt-ivi-demo \
     cm-config-agl-flutter-ivi-demo \
     cm-config-agl-html5-ivi-demo \
+    cm-config-agl-flutter-ivi-demo-simple \
 "
 
 WKS_FILES:remove = " \
