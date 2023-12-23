@@ -1,0 +1,23 @@
+SUMMARY = "vhost gpio backend device"
+DESCRIPTION = "A vhost-user backend that emulates a VirtIO GPIO device"
+HOMEPAGE = "https://github.com/rust-vmm/vhost-device"
+LICENSE = "Apache-2.0 | BSD-3-Clause"
+LIC_FILES_CHKSUM = "\
+    file://LICENSE-APACHE;md5=3b83ef96387f14655fc854ddc3c6bd57 \
+    file://LICENSE-BSD-3-Clause;md5=2489db1359f496fff34bd393df63947e \
+"
+
+DEPENDS = "pipewire"
+
+SRC_URI = "file://vhost-device-sound.tar.bz2 \
+    "
+#SRCREV = "3ca50b71bec800ebe634476f78efacac07ccc6c0"
+S = "${WORKDIR}/vhost-device-sound"
+
+require vhost-device-sound-crates.inc
+
+inherit cargo
+
+SKIP_RECIPE[vhost-device-sound] ?= "${@bb.utils.contains('BBFILE_COLLECTIONS', 'clang-layer', '', 'Depends on clang-native from meta-clang which is not included', d)}"
+
+
