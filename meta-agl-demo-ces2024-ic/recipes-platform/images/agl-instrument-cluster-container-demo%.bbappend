@@ -10,10 +10,6 @@ IMAGE_INSTALL += " \
     cm-config-agl-momi-ivi-demo-res \
 "
 
-IMAGE_INSTALL += " \
-    packagegroup-virtio-loopback-sound \
-"
-
 IMAGE_INSTALL:remove = " \
     packagegroup-pipewire \
     pipewire-ic-ipc \
