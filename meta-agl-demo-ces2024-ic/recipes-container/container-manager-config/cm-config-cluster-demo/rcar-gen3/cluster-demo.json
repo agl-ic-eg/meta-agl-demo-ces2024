@@ -90,6 +90,24 @@
 			},
 			{
 				"type": 		"devnode",
+				"from": 		"/dev/snd/controlC6",
+				"to":			"dev/snd/controlC6",
+				"devnode":		"/dev/snd/controlC6",
+				"optional": 		1,
+				"wideallow": 	0,
+				"exclusive": 	0
+			},
+			{
+				"type": 		"devnode",
+				"from": 		"/dev/snd/pcmC6D0p",
+				"to":			"dev/snd/pcmC6D0p",
+				"devnode":		"/dev/snd/pcmC6D0p",
+				"optional": 		1,
+				"wideallow": 	0,
+				"exclusive": 	0
+			},
+			{
+				"type": 		"devnode",
 				"from": 		"/dev/pvr_sync",
 				"to":			"dev/pvr_sync",
 				"devnode":		"/dev/pvr_sync",

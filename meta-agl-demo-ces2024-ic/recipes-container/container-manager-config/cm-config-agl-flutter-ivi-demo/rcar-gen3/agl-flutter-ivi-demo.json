@@ -25,7 +25,6 @@
 			"keep": ""
 		},
 		"environment": [
-			"PIPEWIRE_RUNTIME_DIR=/var",
 			"HOME=/home/root"
 		]
 	},
@@ -108,12 +107,21 @@
 				"exclusive": 	0
 			},
 			{
-				"type": 		"devdir",
-				"from": 		"/dev/snd",
-				"to":			"dev/snd",
-				"devnode":		"/dev/snd/pcmC0D0p",
+				"type": 		"devnode",
+				"from": 		"/dev/snd/controlC4",
+				"to":			"dev/snd/controlC4",
+				"devnode":		"/dev/snd/controlC4",
 				"optional": 		1,
-				"wideallow": 	1,
+				"wideallow": 	0,
+				"exclusive": 	0
+			},
+			{
+				"type": 		"devnode",
+				"from": 		"/dev/snd/pcmC4D0p",
+				"to":			"dev/snd/pcmC4D0p",
+				"devnode":		"/dev/snd/pcmC4D0p",
+				"optional": 		1,
+				"wideallow": 	0,
 				"exclusive": 	0
 			},
 			{
