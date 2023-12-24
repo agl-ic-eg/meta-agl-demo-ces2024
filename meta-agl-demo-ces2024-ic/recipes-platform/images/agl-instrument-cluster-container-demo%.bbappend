@@ -10,6 +10,15 @@ IMAGE_INSTALL += " \
     cm-config-agl-momi-ivi-demo-res \
 "
 
+IMAGE_INSTALL += " \
+    pulseaudio-server pulseaudio-pa-info pulseaudio-misc \
+    pulseaudio-module-alsa-sink pulseaudio-module-alsa-source \
+    pulseaudio-module-native-protocol-unix pulseaudio-module-loopback \
+    pulseaudio-module-null-sink pulseaudio-module-null-source \
+    pulseaudio-module-* \
+    kernel-asound-loop \
+"
+
 IMAGE_INSTALL:remove = " \
     packagegroup-pipewire \
     pipewire-ic-ipc \

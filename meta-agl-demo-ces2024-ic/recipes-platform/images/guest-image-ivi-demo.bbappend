@@ -6,6 +6,7 @@ IMAGE_INSTALL += " \
     gstreamer1.0-plugins-ugly-meta \
     packagegroup-agl-demo-music-data \
     ttf-vlgothic ttf-sazanami-gothic ttf-sazanami-mincho \
+    alsa-conf-guest alsa-utils \
 "
 
 IMAGE_INSTALL:remove = " \
