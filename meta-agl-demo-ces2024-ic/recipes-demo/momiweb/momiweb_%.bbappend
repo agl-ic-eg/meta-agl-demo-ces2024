@@ -1,6 +1,6 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-SRCREV = "9ec3224076c4afb0cd89cb33baf0a49bec4f6434"
+SRCREV = "4e2c0fe9157d4de74cf8c5543eaa18136a32907b"
 
 RDEPENDS:${PN} += "\
     momicalc \
