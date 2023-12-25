@@ -17,6 +17,7 @@ IMAGE_INSTALL += " \
     pulseaudio-module-null-sink pulseaudio-module-null-source \
     pulseaudio-module-* \
     kernel-asound-loop \
+    ti-bt-firmware wlconf \
 "
 
 IMAGE_INSTALL:remove = " \
