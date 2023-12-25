@@ -24,7 +24,7 @@ while sleep 1 ;do evtest /dev/input/by-id/usb-wch.cn_CH57x-event-kbd ;done | whi
             cmcontrol --change-active-guest-name=agl-momi-ivi-demo
             cmcontrol --shutdown-guest-role=ivi
             ;;
-        KEY_b)
+        KEY_B)
             cmcontrol --change-active-guest-name=agl-momi-ivi-demo-res
             cmcontrol --shutdown-guest-role=ivi
             ;;
