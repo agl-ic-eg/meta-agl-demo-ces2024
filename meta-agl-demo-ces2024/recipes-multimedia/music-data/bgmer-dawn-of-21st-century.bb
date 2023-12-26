@@ -5,7 +5,7 @@ SECTION = "Multimedia"
 
 include recipes-multimedia/music-data/mp3-music-data.inc
 
-MP3_MUSIC_DATA_ARTWORK = "dan.jpg"
+MP3_MUSIC_DATA_ARTWORK = "bug.jpg"
 MP3_MUSIC_DATA_TITLE = "Dawn of the 21st century"
 MP3_MUSIC_DATA_AIRTIST = "BGMer"
 MP3_MUSIC_DATA_ALBUM = "BGMer"

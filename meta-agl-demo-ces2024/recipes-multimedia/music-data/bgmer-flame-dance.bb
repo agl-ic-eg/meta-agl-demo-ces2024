@@ -5,7 +5,7 @@ SECTION = "Multimedia"
 
 include recipes-multimedia/music-data/mp3-music-data.inc
 
-MP3_MUSIC_DATA_ARTWORK = "walts.jpg"
+MP3_MUSIC_DATA_ARTWORK = "rome.jpg"
 MP3_MUSIC_DATA_TITLE = "Flame Dance"
 MP3_MUSIC_DATA_AIRTIST = "BGMer"
 MP3_MUSIC_DATA_ALBUM = "BGMer"

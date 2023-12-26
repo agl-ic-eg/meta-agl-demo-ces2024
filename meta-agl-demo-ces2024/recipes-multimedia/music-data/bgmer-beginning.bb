@@ -5,7 +5,7 @@ SECTION = "Multimedia"
 
 include recipes-multimedia/music-data/mp3-music-data.inc
 
-MP3_MUSIC_DATA_ARTWORK = "ces2019.jpg"
+MP3_MUSIC_DATA_ARTWORK = "cyber.jpg"
 MP3_MUSIC_DATA_TITLE = "Beginning"
 MP3_MUSIC_DATA_AIRTIST = "BGMer"
 MP3_MUSIC_DATA_ALBUM = "BGMer"
