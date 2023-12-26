@@ -1,0 +1,4 @@
+[Match]
+Name=vxcan0
+[Link]
+MTUBytes=16
