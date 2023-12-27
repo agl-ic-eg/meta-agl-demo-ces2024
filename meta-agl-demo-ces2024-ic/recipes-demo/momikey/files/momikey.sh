@@ -17,9 +17,10 @@ event_reader () {
 }
 
 while sleep 1 ;do event_reader ;done | while read line; do
-    unset key target_container
-    [[ "$line" =~ \((KEY_.)\),\ value\ 1 ]] && key="${BASH_REMATCH[1]}"
-    case "$key" in
+    unset key_push key_release target_container
+    [[ "$line" =~ \((KEY_.)\),\ value\ 1 ]] && key_push="${BASH_REMATCH[1]}"
+    [[ "$line" =~ \((KEY_.)\),\ value\ 0 ]] && key_release="${BASH_REMATCH[1]}"
+    case "$key_push" in
         KEY_G)
             cmcontrol --change-active-guest-name=agl-flutter-ivi-demo
             cmcontrol --shutdown-guest-role=ivi
