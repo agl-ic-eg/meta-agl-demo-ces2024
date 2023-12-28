@@ -18,6 +18,7 @@ IMAGE_INSTALL += " \
     pulseaudio-module-* \
     kernel-asound-loop \
     ti-bt-firmware linux-firmware-wl18xx wlconf iw \
+    busybox-udhcpc wpa-supplicant-passphrase wpa-supplicant-cli wpa-supplicant \
     can-utils systemd-netif-config-can-host \
 "
 
