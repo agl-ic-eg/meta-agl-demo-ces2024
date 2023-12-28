@@ -16,34 +16,36 @@ event_reader () {
     evtest "$target_device"
 }
 
+switch_guest () {
+    target_guest="$1"
+    [ "$current_guest" = "$target_guest" ] && return 0
+    cmcontrol --change-active-guest-name="$target_guest"
+    cmcontrol --shutdown-guest-role=ivi
+    current_guest="$target_guest"
+}
+
 while sleep 1 ;do event_reader ;done | while read line; do
     unset key_push key_release target_container
     [[ "$line" =~ \((KEY_.)\),\ value\ 1 ]] && key_push="${BASH_REMATCH[1]}"
     [[ "$line" =~ \((KEY_.)\),\ value\ 0 ]] && key_release="${BASH_REMATCH[1]}"
     case "$key_push" in
         KEY_G)
-            cmcontrol --change-active-guest-name=agl-flutter-ivi-demo
-            cmcontrol --shutdown-guest-role=ivi
+            switch_guest agl-flutter-ivi-demo
             ;;
         KEY_S)
-            cmcontrol --change-active-guest-name=agl-flutter-ivi-demo-simple
-            cmcontrol --shutdown-guest-role=ivi
+            switch_guest agl-flutter-ivi-demo-simple
             ;;
         KEY_D)
-            cmcontrol --change-active-guest-name=agl-qt-ivi-demo
-            cmcontrol --shutdown-guest-role=ivi
+            switch_guest agl-qt-ivi-demo
             ;;
         KEY_H)
-            cmcontrol --change-active-guest-name=agl-html5-ivi-demo
-            cmcontrol --shutdown-guest-role=ivi
+            switch_guest agl-html5-ivi-demo
             ;;
         KEY_A)
-            cmcontrol --change-active-guest-name=agl-momi-ivi-demo
-            cmcontrol --shutdown-guest-role=ivi
+            switch_guest agl-momi-ivi-demo
             ;;
         KEY_B)
-            cmcontrol --change-active-guest-name=agl-momi-ivi-demo-res
-            cmcontrol --shutdown-guest-role=ivi
+            switch_guest agl-momi-ivi-demo-res
             ;;
         KEY_C)
             cmcontrol --force-reboot-guest-role=ivi
