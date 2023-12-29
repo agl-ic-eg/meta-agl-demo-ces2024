@@ -18,7 +18,8 @@ IMAGE_INSTALL += " \
     pulseaudio-module-* \
     kernel-asound-loop \
     ti-bt-firmware linux-firmware-wl18xx wlconf iw \
-    can-utils systemd-netif-config-can-host \
+    busybox-udhcpc wpa-supplicant-passphrase wpa-supplicant-cli wpa-supplicant \
+    can-utils vxcan-setup \
 "
 
 IMAGE_INSTALL:remove = " \

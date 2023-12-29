@@ -1,6 +1,6 @@
 [NetDev]
-Name=vxcan0
+Name=vxcan1
 Kind=vxcan
 
 [VXCAN]
-Peer=vxcan1
+Peer=vxcan0
