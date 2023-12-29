@@ -19,7 +19,7 @@ IMAGE_INSTALL += " \
     kernel-asound-loop \
     ti-bt-firmware linux-firmware-wl18xx wlconf iw \
     busybox-udhcpc wpa-supplicant-passphrase wpa-supplicant-cli wpa-supplicant \
-    can-utils systemd-netif-config-can-host \
+    can-utils vxcan-setup \
 "
 
 IMAGE_INSTALL:remove = " \

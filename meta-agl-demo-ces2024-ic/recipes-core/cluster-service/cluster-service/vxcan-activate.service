@@ -1,0 +1,12 @@
+[Unit]
+Description=VXCAN activate Service
+After=basic.target
+Before=cluster-service.service
+Requires=basic.target
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/vxcan-activate.sh
+
+[Install]
+WantedBy=basic.target

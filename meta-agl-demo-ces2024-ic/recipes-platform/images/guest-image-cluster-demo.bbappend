@@ -1,7 +1,7 @@
 IMAGE_INSTALL += " \
     alsa-conf-guest-cluster \
     alsa-utils-aplay alsa-utils \
-    can-utils systemd-netif-config-can-guest \
+    can-utils \
 "
 
 IMAGE_INSTALL:remove = " \

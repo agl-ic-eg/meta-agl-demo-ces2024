@@ -1,0 +1,11 @@
+[Unit]
+Description=VXCAN setup service
+After=basic.target
+Before=container-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/vxcan-setup.sh
+
+[Install]
+WantedBy=basic.target

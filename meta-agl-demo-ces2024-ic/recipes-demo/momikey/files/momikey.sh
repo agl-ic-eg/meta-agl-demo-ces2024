@@ -28,7 +28,7 @@ while sleep 1 ;do event_reader ;done | while read line; do
     unset key_push key_release target_container
     [[ "$line" =~ \((KEY_.)\),\ value\ 1 ]] && key_push="${BASH_REMATCH[1]}"
     [[ "$line" =~ \((KEY_.)\),\ value\ 0 ]] && key_release="${BASH_REMATCH[1]}"
-    case "$key_push" in
+    case "$key_release" in
         KEY_G)
             switch_guest agl-flutter-ivi-demo
             ;;
@@ -49,6 +49,26 @@ while sleep 1 ;do event_reader ;done | while read line; do
             ;;
         KEY_C)
             cmcontrol --force-reboot-guest-role=ivi
+            ;;
+        KEY_1)
+            cansend vxcan1 '168#0000000000000000'
+            ;;
+        KEY_2)
+            cansend vxcan1 '484#0000000000000000'
+            ;;
+        KEY_3)
+            cansend vxcan1 '232#0000000000000000'
+            ;;
+    esac
+    case "$key_push" in
+        KEY_1)
+            cansend vxcan1 '168#1000000000000000'
+            ;;
+        KEY_2)
+            cansend vxcan1 '484#0008000000000000'
+            ;;
+        KEY_3)
+            cansend vxcan1 '232#4000000000000000'
             ;;
     esac
 done
