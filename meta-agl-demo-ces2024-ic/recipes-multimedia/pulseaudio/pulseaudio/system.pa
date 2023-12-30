@@ -33,26 +33,13 @@ load-module module-native-protocol-unix auth-anonymous=1
 
 ### Two guest stream into one sink
 load-module module-null-sink sink_name=guest_mix
-load-module module-loopback sink=guest_mix source=guest_source_0
-load-module module-loopback sink=guest_mix source=guest_source_1
-load-module module-loopback source=guest_mix.monitor sink=phy_out
+load-module module-loopback sink=guest_mix source=guest_source_0 latency_msec=10
+load-module module-loopback sink=guest_mix source=guest_source_1 latency_msec=10
+load-module module-loopback source=guest_mix.monitor sink=phy_out latency_msec=10
 
-### Automatically restore the default sink/source when changed by the user
-### during runtime
-### NOTE: This should be loaded as early as possible so that subsequent modules
-### that look up the default sink/source get the right value
-#load-module module-default-device-restore
+### Volume attenuator
+load-module module-attenuate sink_name=guest_attenuate target_name=guest_source_0
+load-module module-loopback sink=guest_attenuate source=guest_source_1 latency_msec=50
 
-### Make sure we always have a sink around, even if it is a null sink.
-#load-module module-always-sink
-
-### Automatically suspend sinks/sources that become idle for too long
-#load-module module-suspend-on-idle
-
-### Enable positioned event sounds
-#load-module module-position-event-sounds
-
-### Allow including a system.pa.d directory, which if present, can be used
-### for additional configuration snippets.
 .nofail
 .include /etc/pulse/system.pa.d

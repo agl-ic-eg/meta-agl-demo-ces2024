@@ -1,6 +1,7 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/pulseaudio:"
 
 SRC_URI:append = " \
+    file://0001-Add-module-attenuate.patch \
     file://pulseaudio.service \
     file://system.pa \
     file://daemon.conf \
