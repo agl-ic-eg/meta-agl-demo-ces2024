@@ -50,24 +50,24 @@ while sleep 1 ;do event_reader ;done | while read line; do
         KEY_C)
             cmcontrol --force-reboot-guest-role=ivi
             ;;
-        KEY_1)
+        KEY_Z)
             cansend vxcan1 '168#0000000000000000'
             ;;
-        KEY_2)
+        KEY_X)
             cansend vxcan1 '484#0000000000000000'
             ;;
-        KEY_3)
+        KEY_V)
             cansend vxcan1 '232#0000000000000000'
             ;;
     esac
     case "$key_push" in
-        KEY_1)
+        KEY_Z)
             cansend vxcan1 '168#1000000000000000'
             ;;
-        KEY_2)
+        KEY_X)
             cansend vxcan1 '484#0008000000000000'
             ;;
-        KEY_3)
+        KEY_V)
             cansend vxcan1 '232#4000000000000000'
             ;;
     esac
