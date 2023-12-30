@@ -11,7 +11,7 @@ IMAGE_INSTALL += " \
     gdb glibc-thread-db \
     libasan libubsan liblsan libtsan \
     htop util-linux-taskset util-linux-chrt \
-   libcgroup \
+    libcgroup \
 "
 
 inherit agl-crosssdk
