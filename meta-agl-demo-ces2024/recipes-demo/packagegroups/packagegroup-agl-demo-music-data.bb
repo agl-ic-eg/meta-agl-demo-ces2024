@@ -15,6 +15,9 @@ RDEPENDS:${PN} += " \
     bgmer-departure-progress bgmer-fire-cracker \
     bgmer-flame-dance bgmer-imaginary-campus \
     bgmer-party-maker bgmer-whistling \
+    bgmer-commutable-city bgmer-departing-for-battle \
+    bgmer-highway-of-slitude bgmer-filex \
+    bgmer-loophole-johnny bgmer-black-cat \
     \
     symlink-music-dir\
     "
