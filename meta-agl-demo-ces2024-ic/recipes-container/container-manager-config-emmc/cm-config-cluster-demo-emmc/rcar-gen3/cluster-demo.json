@@ -129,6 +129,11 @@
 					"mode": "bridge"
 				}
 			}
+		],
+		"dynamic": [
+			{
+				"ifname": 	"vxcan0"
+			}
 		]
 	}
 }
