@@ -1,0 +1,32 @@
+From 2383eb57da6e42b7cc46204bccddf740417dbcb8 Mon Sep 17 00:00:00 2001
+From: Naoto Yamaguchi <naoto.yamaguchi@aisin.co.jp>
+Date: Tue, 2 Jan 2024 18:26:34 +0900
+Subject: [PATCH] Change default volume to 100%
+
+Signed-off-by: Naoto Yamaguchi <naoto.yamaguchi@aisin.co.jp>
+---
+ src/AudiomixerService.h | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/AudiomixerService.h b/src/AudiomixerService.h
+index dd26743..b2036c8 100644
+--- a/src/AudiomixerService.h
++++ b/src/AudiomixerService.h
+@@ -56,11 +56,11 @@ private:
+ 	struct audiomixer *m_audiomixer;
+ 	struct audiomixer_events m_audiomixer_events;
+ 
+-	double m_volume = 0.5;
+-	double m_volume_faded = 0.5;
++	double m_volume = 1.0;
++	double m_volume_faded = 1.0;
+ 	int m_balance = 0;
+ 	int m_fade = 0;
+-	double m_nav_volume = 0.5;
++	double m_nav_volume = 1.0;
+ 	bool m_nav_mute = false;
+ 
+ 	void HandleSignalChange(const std::string &path, const Datapoint &dp);
+-- 
+2.25.1
+
