@@ -1,0 +1,9 @@
+{
+	"mapAccessToken":"MAPBOX_ACCESS_TOKEN",
+	"speed":60,
+	"interval":100,
+	"latitude":36.1363,
+	"longitude":-115.151,
+	"mapStyleUrls":"styles/v1/mapbox/streets-v11",
+	"enableOSM":true
+}

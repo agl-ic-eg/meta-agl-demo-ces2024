@@ -1,0 +1,40 @@
+From 072ff63a7acac8443bf1876b7c48e8a07bb4ce92 Mon Sep 17 00:00:00 2001
+From: Naoto Yamaguchi <naoto.yamaguchi@aisin.co.jp>
+Date: Tue, 2 Jan 2024 08:12:24 +0900
+Subject: [PATCH] Update mominavi for CES2024 demo
+
+Signed-off-by: Naoto Yamaguchi <naoto.yamaguchi@aisin.co.jp>
+---
+ mominavi.cpp | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/mominavi.cpp b/mominavi.cpp
+index 1679182..6716193 100644
+--- a/mominavi.cpp
++++ b/mominavi.cpp
+@@ -24,6 +24,21 @@ int main(int argc, char *argv[])
+     QObject *rootObject = engine.rootObjects().constFirst();
+     QString StrEnv = qgetenv("MOMIMAP_MAPBOX_ACCESS_TOKEN");
+     rootObject->setProperty("mapbox_access_token", StrEnv);
+-	
++
++    QString StrEnvStyle = qgetenv("MOMIMAP_MAPBOX_STYLE");
++    if (StrEnvStyle.size() > 0) {
++        rootObject->setProperty("mapbox_style_urls", StrEnvStyle);
++    }
++
++    QString StrEnvLat = qgetenv("MOMIMAP_INITIAL_LATITUDE");
++    if (StrEnvLat.size() > 0) {
++        rootObject->setProperty("car_position_lat", StrEnvLat);
++    }
++
++    QString StrEnvLong = qgetenv("MOMIMAP_INITIAL_LONGITUDE");
++    if (StrEnvLong.size() > 0) {
++        rootObject->setProperty("car_position_lon", StrEnvLong);
++    }
++
+     return app.exec();
+ }
+-- 
+2.25.1
+

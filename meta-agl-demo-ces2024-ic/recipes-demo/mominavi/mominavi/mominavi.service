@@ -1,0 +1,12 @@
+[Unit]
+Description=mominavi
+After=multi-user.target weston.service network-online.target
+Requires=multi-user.target weston.service network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/default/mominavi
+ExecStart=/usr/bin/mominavi
+
+[Install]
+WantedBy=multi-user.target
