@@ -1,0 +1,104 @@
+From 5ea0d6a9d3d9af465a01178b42fdfde82a238e33 Mon Sep 17 00:00:00 2001
+From: Naoto Yamaguchi <naoto.yamaguchi@aisin.co.jp>
+Date: Tue, 2 Jan 2024 16:01:54 +0900
+Subject: [PATCH] Rework momiplayer info panel
+
+Signed-off-by: Naoto Yamaguchi <naoto.yamaguchi@aisin.co.jp>
+---
+ momiplay.qml | 73 ++++++++++++++++++++++++++++++++++------------------
+ 1 file changed, 48 insertions(+), 25 deletions(-)
+
+diff --git a/momiplay.qml b/momiplay.qml
+index 8945b57..6b5bfd2 100644
+--- a/momiplay.qml
++++ b/momiplay.qml
+@@ -49,13 +49,54 @@ ApplicationWindow {
+         width: 920
+         height: 1080
+         clip: true
+-        Image {
+-	        x: 204
+-	        y: 100
+-	        width: 512
+-	        height: 512
+-            fillMode: Image.PreserveAspectCrop
+-            source: player.metaData.coverArtImage ? player.metaData.coverArtImage : ''
++
++        Item {
++            id: infopanel
++            x: 30
++            y: 100
++            height :400
++            width : 920-30
++
++            ColumnLayout {
++                anchors.fill: parent
++                Label {
++                    id: title
++                    font.pixelSize: 48
++                    color: '#ffffffff'
++                    Layout.alignment: Layout.right
++                    text: "Title:   " + (player.metaData.title ? player.metaData.title : 'No Data')
++                    horizontalAlignment: Label.AlignHCenter
++                    verticalAlignment: Label.AlignVCenter
++                }
++                Label {
++                    id: artist
++                    font.pixelSize: 48
++                    color: '#ffffffff'
++                    Layout.alignment: Layout.right
++                    text: "Artist:  " + (player.metaData.contributingArtist ? player.metaData.contributingArtist : 'No Data')
++                    horizontalAlignment: Label.AlignHCenter
++                    verticalAlignment: Label.AlignVCenter
++                }
++                Label {
++                    id: audiocodec
++                    font.pixelSize: 38
++                    color: '#ffffffff'
++                    Layout.alignment: Layout.right
++                    text: "Codec:   " + (player.metaData.audioCodec ? player.metaData.audioCodec : 'No Data')
++                    horizontalAlignment: Label.AlignHCenter
++                    verticalAlignment: Label.AlignVCenter
++                }
++                Label {
++                    id: audiobitrate
++                    font.pixelSize: 38
++                    color: '#ffffffff'
++                    Layout.alignment: Layout.right
++                    text: "BitRate:  " + (player.metaData.audioBitRate ? (player.metaData.audioBitRate + 'bps') : 'No Data')
++                    horizontalAlignment: Label.AlignHCenter
++                    verticalAlignment: Label.AlignVCenter
++                }
++            }
++
+         }
+ 
+         Item {
+@@ -88,24 +129,6 @@ ApplicationWindow {
+                             onImage: './images/AGL_MediaPlayer_Loop_Active.svg'
+                         }
+                     }
+-                    ColumnLayout {
+-                        anchors.fill: parent
+-                        Label {
+-                            id: title
+-                            Layout.alignment: Layout.Center
+-                            text: player.metaData.title ? player.metaData.title : ''
+-                            horizontalAlignment: Label.AlignHCenter
+-                            verticalAlignment: Label.AlignVCenter
+-                        }
+-                        Label {
+-                            id: artist
+-                            Layout.alignment: Layout.Center
+-                            text: player.metaData.author ? player.metaData.author : ''
+-                            horizontalAlignment: Label.AlignHCenter
+-                            verticalAlignment: Label.AlignVCenter
+-                            font.pixelSize: title.font.pixelSize * 0.6
+-                        }
+-                    }
+                 }
+                 Slider {
+                     id: slider
+-- 
+2.25.1
+
