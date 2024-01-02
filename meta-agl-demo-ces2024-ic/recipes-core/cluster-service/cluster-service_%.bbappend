@@ -2,7 +2,7 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/cluster-service:"
 
 DEPENDS:append = " alsa-lib"
 
-SRCREV = "fe9db29c07aed13885b35b06b1ff0523023045c2"
+SRCREV = "d67d8556b134e01525ef552abc1b78b958d7c233"
 SRC_URI = " \
     git://github.com/agl-ic-eg/cluster-service.git;branch=ces2024;protocol=https \
     file://cluster-service.service \
