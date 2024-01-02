@@ -427,14 +427,14 @@ index 0000000..04d2b79
 +	pa_assert_se(u = msg->userdata);
 +
 +	if (code == ATTENUATE_MESSAGE_MUTE) {
-+		fprintf(stderr, "Attenuate MUTE GET\n");
++		//fprintf(stderr, "Attenuate MUTE GET\n");
 +		if (u->source != NULL) {
 +			pa_cvolume cvolume;
 +			pa_cvolume_set(&cvolume, 1, PA_VOLUME_MUTED);
 +			pa_source_set_soft_volume(u->source, &cvolume);
 +		}
 +	} else {
-+		fprintf(stderr, "Attenuate UNMUTE GET\n");
++		//fprintf(stderr, "Attenuate UNMUTE GET\n");
 +		if (u->source != NULL) {
 +			pa_cvolume cvolume;
 +			pa_cvolume_set(&cvolume, 1, PA_VOLUME_NORM);
