@@ -2,7 +2,7 @@
 	"name": "agl-momi-ivi-demo",
 	"role": "ivi",
 	"base": {
-		"autoboot": true,
+		"autoboot": false,
 		"bootpriority": 10,
 		"rootfs": {
 			"path": "/opt/container/guests/agl-momi-ivi-demo/rootfs",
