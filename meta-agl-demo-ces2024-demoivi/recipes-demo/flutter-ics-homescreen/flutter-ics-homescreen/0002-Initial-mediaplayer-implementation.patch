@@ -1,0 +1,2258 @@
+From 2d395f4431ba4aa5055d02437463588f4d4c8127 Mon Sep 17 00:00:00 2001
+From: Scott Murray <scott.murray@konsulko.com>
+Date: Wed, 3 Jan 2024 18:14:12 -0500
+Subject: [PATCH 2/2] Initial mediaplayer implementation
+
+Notable changes:
+- Added dart_mpd package as a dependency.
+- Added MPD client class and associated provider.
+- Added MPD client configuration to the configuration file for
+  potential usecases where MPD may not be available locally.
+- Added playlist, play state, art, etc. providers for use in the
+  mediaplayer front end UI.
+- Reworked MediaPlayer classes to wire up MPD client backend.
+- Removed volume slider from the bottom of the media pages to
+  make more room for playlist / preset tables, as only being
+  able to show 3 entries in each was not usable in practice.
+- Reworked media player mocked up position indicator into an
+  actual slider control, and reworked the radio slider styling
+  to match for better UI consistency.
+- Reworked media player and radio playlist / preset tables to
+  attempt to have them layout at the same location and add an
+  always visible scroll bar.  The scroll bars currently have a
+  layout issue with respect to scroll track size that does not
+  seem to have an obvious fix.  They are usable for now, and
+  further investigation will be done when time permits.
+- Wired up play/pause button on the side volume control via a
+  new set of play state and controller providers.
+
+Bug-AGL: SPEC-5028, SPEC-5029
+
+Change-Id: I87efecc58b4e185443942eb32ff8148ebcd675c3
+Signed-off-by: Scott Murray <scott.murray@konsulko.com>
+---
+ .../data_providers/app_config_provider.dart   |  50 ++-
+ lib/data/data_providers/app_provider.dart     |  46 ++-
+ .../data_providers/mediaplayer_notifier.dart  |  25 ++
+ .../mediaplayer_position_notifier.dart        |  29 ++
+ lib/data/data_providers/mpd_client.dart       | 378 ++++++++++++++++++
+ lib/data/data_providers/play_controller.dart  |  40 ++
+ .../data_providers/playlist_art_notifier.dart |  20 +
+ .../data_providers/playlist_notifier.dart     |  37 ++
+ .../radio_presets_provider.dart               |   2 -
+ lib/data/models/audio_state.dart              |  30 --
+ lib/data/models/mediaplayer_state.dart        |  49 +++
+ lib/data/models/radio_state.dart              |  32 --
+ lib/export.dart                               |   1 +
+ .../common_widget/volume_and_fan_control.dart |   4 +-
+ .../common_widget/volume_bar.dart             |  23 +-
+ lib/presentation/screens/media/media.dart     |  55 ++-
+ .../screens/media/media_player.dart           |  68 ++--
+ .../screens/media/media_player_controls.dart  | 201 +++++++---
+ .../screens/media/play_list_table.dart        | 244 ++++++-----
+ .../screens/media/radio_player.dart           |   4 +-
+ .../screens/media/radio_player_controls.dart  | 146 ++++---
+ .../screens/media/radio_preset_table.dart     | 172 +++++---
+ .../screens/splash/widget/splash_content.dart |   1 +
+ pubspec.lock                                  |  12 +-
+ pubspec.yaml                                  |   1 +
+ 25 files changed, 1229 insertions(+), 441 deletions(-)
+ create mode 100644 lib/data/data_providers/mediaplayer_notifier.dart
+ create mode 100644 lib/data/data_providers/mediaplayer_position_notifier.dart
+ create mode 100644 lib/data/data_providers/mpd_client.dart
+ create mode 100644 lib/data/data_providers/play_controller.dart
+ create mode 100644 lib/data/data_providers/playlist_art_notifier.dart
+ create mode 100644 lib/data/data_providers/playlist_notifier.dart
+ create mode 100644 lib/data/models/mediaplayer_state.dart
+
+diff --git a/lib/data/data_providers/app_config_provider.dart b/lib/data/data_providers/app_config_provider.dart
+index a60a462..54d0e07 100644
+--- a/lib/data/data_providers/app_config_provider.dart
++++ b/lib/data/data_providers/app_config_provider.dart
+@@ -56,11 +56,27 @@ class RadioConfig {
+   }
+ }
+ 
++class MpdConfig {
++  final String hostname;
++  final int port;
++
++  static String defaultHostname = 'localhost';
++  static int defaultPort = 6600;
++
++  MpdConfig({required this.hostname, required this.port});
++
++  static MpdConfig defaultConfig() {
++    return MpdConfig(
++        hostname: MpdConfig.defaultHostname, port: MpdConfig.defaultPort);
++  }
++}
++
+ class AppConfig {
+   final bool disableBkgAnimation;
+   final bool randomHybridAnimation;
+   final KuksaConfig kuksaConfig;
+   final RadioConfig radioConfig;
++  final MpdConfig mpdConfig;
+ 
+   static String configFilePath = '/etc/xdg/AGL/ics-homescreen.yaml';
+ 
+@@ -68,7 +84,8 @@ class AppConfig {
+       {required this.disableBkgAnimation,
+       required this.randomHybridAnimation,
+       required this.kuksaConfig,
+-      required this.radioConfig});
++      required this.radioConfig,
++      required this.mpdConfig});
+ 
+   static KuksaConfig parseKuksaConfig(YamlMap kuksaMap) {
+     try {
+@@ -160,6 +177,24 @@ class AppConfig {
+       return RadioConfig.defaultConfig();
+     }
+   }
++
++  static MpdConfig parseMpdConfig(YamlMap mpdMap) {
++    try {
++      String hostname = MpdConfig.defaultHostname;
++      if (mpdMap.containsKey('hostname')) {
++        hostname = mpdMap['hostname'];
++      }
++
++      int port = MpdConfig.defaultPort;
++      if (mpdMap.containsKey('port')) {
++        port = mpdMap['port'];
++      }
++
++      return MpdConfig(hostname: hostname, port: port);
++    } catch (_) {
++      return MpdConfig.defaultConfig();
++    }
++  }
+ }
+ 
+ final appConfigProvider = Provider((ref) {
+@@ -189,6 +224,13 @@ final appConfigProvider = Provider((ref) {
+       radioConfig = RadioConfig.defaultConfig();
+     }
+ 
++    MpdConfig mpdConfig;
++    if (yamlMap.containsKey('mpd')) {
++      mpdConfig = AppConfig.parseMpdConfig(yamlMap['mpd']);
++    } else {
++      mpdConfig = MpdConfig.defaultConfig();
++    }
++
+     bool disableBkgAnimation = disableBkgAnimationDefault;
+     if (yamlMap.containsKey('disable-bg-animation')) {
+       var value = yamlMap['disable-bg-animation'];
+@@ -209,12 +251,14 @@ final appConfigProvider = Provider((ref) {
+         disableBkgAnimation: disableBkgAnimation,
+         randomHybridAnimation: randomHybridAnimation,
+         kuksaConfig: kuksaConfig,
+-        radioConfig: radioConfig);
++        radioConfig: radioConfig,
++        mpdConfig: mpdConfig);
+   } catch (_) {
+     return AppConfig(
+         disableBkgAnimation: false,
+         randomHybridAnimation: false,
+         kuksaConfig: KuksaConfig.defaultConfig(),
+-        radioConfig: RadioConfig.defaultConfig());
++        radioConfig: RadioConfig.defaultConfig(),
++        mpdConfig: MpdConfig.defaultConfig());
+   }
+ });
+diff --git a/lib/data/data_providers/app_provider.dart b/lib/data/data_providers/app_provider.dart
+index ad3dd22..3d00d4c 100644
+--- a/lib/data/data_providers/app_provider.dart
++++ b/lib/data/data_providers/app_provider.dart
+@@ -2,16 +2,23 @@ import 'package:flutter_ics_homescreen/data/data_providers/hybrid_notifier.dart'
+ import 'package:flutter_ics_homescreen/data/data_providers/signal_notifier.dart';
+ import 'package:flutter_ics_homescreen/data/data_providers/time_notifier.dart';
+ import 'package:flutter_ics_homescreen/data/data_providers/units_notifier.dart';
+-import 'package:flutter_ics_homescreen/data/data_providers/audio_notifier.dart';
+ import 'package:flutter_ics_homescreen/data/data_providers/users_notifier.dart';
++import 'package:flutter_ics_homescreen/data/data_providers/vehicle_notifier.dart';
++import 'package:flutter_ics_homescreen/data/data_providers/audio_notifier.dart';
+ import 'package:flutter_ics_homescreen/data/data_providers/radio_notifier.dart';
++import 'package:flutter_ics_homescreen/data/data_providers/mediaplayer_notifier.dart';
++import 'package:flutter_ics_homescreen/data/data_providers/mediaplayer_position_notifier.dart';
++import 'package:flutter_ics_homescreen/data/data_providers/playlist_notifier.dart';
++import 'package:flutter_ics_homescreen/data/data_providers/playlist_art_notifier.dart';
+ import 'package:flutter_ics_homescreen/data/data_providers/val_client.dart';
+ import 'package:flutter_ics_homescreen/data/data_providers/app_launcher.dart';
+ import 'package:flutter_ics_homescreen/data/data_providers/radio_client.dart';
++import 'package:flutter_ics_homescreen/data/data_providers/mpd_client.dart';
++import 'package:flutter_ics_homescreen/data/data_providers/play_controller.dart';
+ import 'package:flutter_ics_homescreen/export.dart';
+ 
+-import '../models/users.dart';
+-import 'vehicle_notifier.dart';
++import 'package:flutter_ics_homescreen/data/models/users.dart';
++import 'package:flutter_ics_homescreen/data/models/mediaplayer_state.dart';
+ 
+ enum AppState {
+   home,
+@@ -59,6 +66,11 @@ final radioClientProvider = Provider((ref) {
+   return RadioClient(config: config, ref: ref);
+ });
+ 
++final mpdClientProvider = Provider((ref) {
++  MpdConfig config = ref.watch(appConfigProvider).mpdConfig;
++  return MpdClient(config: config, ref: ref);
++});
++
+ final vehicleProvider =
+     NotifierProvider<VehicleNotifier, Vehicle>(VehicleNotifier.new);
+ 
+@@ -76,6 +88,34 @@ final audioStateProvider =
+ final radioStateProvider =
+     NotifierProvider<RadioStateNotifier, RadioState>(RadioStateNotifier.new);
+ 
++final mediaPlayerStateProvider =
++    NotifierProvider<MediaPlayerStateNotifier, MediaPlayerState>(
++        MediaPlayerStateNotifier.new);
++
++final mediaPlayerPositionProvider =
++    NotifierProvider<MediaPlayerPositionNotifier, Duration>(
++        MediaPlayerPositionNotifier.new);
++
++final playlistProvider =
++    NotifierProvider<PlaylistNotifier, List<PlaylistEntry>>(
++        PlaylistNotifier.new);
++
++final playlistArtProvider =
++    NotifierProvider<PlaylistArtNotifier, Map<int, Uint8List>>(
++        PlaylistArtNotifier.new);
++
++final playStateProvider = StateProvider<bool>((ref) {
++  final mediaPlayState = ref.watch(
++      mediaPlayerStateProvider.select((mediaplayer) => mediaplayer.playState));
++  final radioPlaying =
++      ref.watch(radioStateProvider.select((radio) => radio.playing));
++  return (mediaPlayState == PlayState.playing || radioPlaying);
++});
++
++final playControllerProvider = Provider((ref) {
++  return PlayController(ref: ref);
++});
++
+ final usersProvider = StateNotifierProvider<UsersNotifier, Users>((ref) {
+   return UsersNotifier(Users.initial());
+ });
+diff --git a/lib/data/data_providers/mediaplayer_notifier.dart b/lib/data/data_providers/mediaplayer_notifier.dart
+new file mode 100644
+index 0000000..2d02e75
+--- /dev/null
++++ b/lib/data/data_providers/mediaplayer_notifier.dart
+@@ -0,0 +1,25 @@
++import 'package:flutter_ics_homescreen/export.dart';
++import 'playlist_notifier.dart';
++
++class MediaPlayerStateNotifier extends Notifier<MediaPlayerState> {
++  @override
++  MediaPlayerState build() {
++    return MediaPlayerState.initial();
++  }
++
++  void updatePlayState(PlayState newState) {
++    state = state.copyWith(playState: newState);
++  }
++
++  void updatePlaylistPosition(int position) {
++    state = state.copyWith(playlistPosition: position);
++  }
++
++  void updateCurrent(PlaylistEntry song) {
++    state = state.copyWith(song: song, playlistPosition: song.position);
++  }
++
++  void reset() {
++    state = MediaPlayerState.initial();
++  }
++}
+diff --git a/lib/data/data_providers/mediaplayer_position_notifier.dart b/lib/data/data_providers/mediaplayer_position_notifier.dart
+new file mode 100644
+index 0000000..be896da
+--- /dev/null
++++ b/lib/data/data_providers/mediaplayer_position_notifier.dart
+@@ -0,0 +1,29 @@
++import 'dart:async';
++import 'package:flutter_ics_homescreen/export.dart';
++
++class MediaPlayerPositionNotifier extends Notifier<Duration> {
++  Timer? positionTimer;
++
++  @override
++  Duration build() {
++    return Duration.zero;
++  }
++
++  void set(Duration position) {
++    state = position;
++  }
++
++  void play() {
++    positionTimer ??=
++        Timer.periodic(const Duration(milliseconds: 250), (timer) {
++      state = state + const Duration(milliseconds: 250);
++    });
++  }
++
++  void pause() {
++    if (positionTimer != null) {
++      positionTimer!.cancel();
++      positionTimer = null;
++    }
++  }
++}
+diff --git a/lib/data/data_providers/mpd_client.dart b/lib/data/data_providers/mpd_client.dart
+new file mode 100644
+index 0000000..98d8918
+--- /dev/null
++++ b/lib/data/data_providers/mpd_client.dart
+@@ -0,0 +1,378 @@
++import 'package:dart_mpd/dart_mpd.dart' as api;
++import 'package:flutter_ics_homescreen/export.dart';
++import 'playlist_notifier.dart';
++
++class ArtStateEntry {
++  bool reading = false;
++  bool read = false;
++
++  ArtStateEntry({required this.reading, required this.read});
++}
++
++class MpdClient {
++  final MpdConfig config;
++  final Ref ref;
++  late api.MpdClient eventClient;
++  late api.MpdClient client;
++  Map<int, ArtStateEntry> artState = {};
++
++  MpdClient({required this.config, required this.ref}) {
++    debugPrint("Connecting to MPD at ${config.hostname}:${config.port}");
++    client = api.MpdClient(
++        connectionDetails: api.MpdConnectionDetails(
++            host: config.hostname,
++            port: config.port,
++            timeout: const Duration(minutes: 2)),
++        onConnect: () => handleConnect(),
++        onDone: () => handleDone(),
++        onError: (e, st) => handleError(e, st));
++
++    // Second client instance to keep running in idle state to receive
++    // events
++    eventClient = api.MpdClient(
++        connectionDetails: api.MpdConnectionDetails(
++            host: config.hostname,
++            port: config.port,
++            timeout: const Duration(minutes: 2)),
++        onConnect: () => handleConnect(),
++        onDone: () => handleDone(),
++        onError: (e, st) => handleError(e, st));
++  }
++
++  void run() async {
++    var idleEvents = <api.MpdSubsystem>{
++      api.MpdSubsystem.database,
++      api.MpdSubsystem.playlist,
++      api.MpdSubsystem.player
++    };
++    bool done = false;
++    while (!done) {
++      //debugPrint("Calling MPD idle!");
++      var events = await eventClient.idle(idleEvents);
++      for (var event in events) {
++        switch (event) {
++          case api.MpdSubsystem.database:
++            //debugPrint("Got MPD database event");
++            await handleDatabaseEvent();
++            break;
++          case api.MpdSubsystem.playlist:
++            //debugPrint("Got MPD queue event");
++            await handleQueueEvent();
++            break;
++          case api.MpdSubsystem.player:
++            //debugPrint("Got MPD player event");
++            await handlePlayerEvent();
++            break;
++          default:
++            break;
++        }
++      }
++    }
++  }
++
++  void handleConnect() {
++    debugPrint("Connected to MPD!");
++  }
++
++  void handleResponse(api.MpdResponse response) {
++    debugPrint('Got MPD response $response');
++  }
++
++  void handleDone() {
++    debugPrint('Got MPD done!');
++  }
++
++  void handleError(Object e, StackTrace st) {
++    debugPrint('ERROR:\n$st');
++  }
++
++  // Idle state event handlers
++
++  Future handleDatabaseEvent() async {
++    eventClient.clear();
++    eventClient.add("/");
++  }
++
++  Future handleQueueEvent() async {
++    ref.read(playlistProvider.notifier).clear();
++    artState.clear();
++    ref.read(playlistArtProvider.notifier).clear();
++    ref.read(mediaPlayerStateProvider.notifier).reset();
++
++    var songs = await eventClient.playlistinfo();
++    for (var song in songs) {
++      //debugPrint("Got song ${song.title} - ${song.artist} at pos ${song.pos}");
++      int position = 0;
++      if (song.pos != null) {
++        position = song.pos!;
++      } else {
++        //debugPrint("WARNING: song has no position in queue, ignoring");
++        continue;
++      }
++      String title = "";
++      if (song.title != null) {
++        title = song.title!.join(" ");
++      } else {
++        // Just use filename
++        title = song.file;
++      }
++      String album = "";
++      if (song.album != null) {
++        album = song.album!.join(" ");
++      }
++      String artist = "";
++      if (song.artist != null) {
++        artist = song.artist!.join(" ");
++      }
++      Duration duration = Duration.zero;
++      if (song.duration != null) {
++        duration = song.duration!;
++      }
++      //debugPrint(
++      //    "Got playlist entry \"$title\" - \"$album\" - \"$artist\" at $position");
++
++      if (position == 0) {
++        ref.read(mediaPlayerStateProvider.notifier).updateCurrent(PlaylistEntry(
++            title: title,
++            album: album,
++            artist: artist,
++            file: song.file,
++            duration: duration,
++            position: position));
++
++        if (song.file.isNotEmpty) {
++          readSongArt(position, song.file);
++        }
++      }
++      ref.read(playlistProvider.notifier).add(PlaylistEntry(
++          title: title,
++          album: album,
++          artist: artist,
++          file: song.file,
++          duration: duration,
++          position: position));
++    }
++  }
++
++  Future handlePlayerEvent() async {
++    String songFile = "";
++    int songPosition = -1;
++    var song = await eventClient.currentsong();
++    if (song != null) {
++      //debugPrint(
++      //    "Player event: song ${song.title} - ${song.artist} at pos ${song.pos}");
++      if (song.pos != null) {
++        songPosition = song.pos!;
++      }
++      if (songPosition < 0) {
++        debugPrint("WARNING: song has no position in queue, ignoring");
++        return;
++      }
++      String title = "";
++      if (song.title != null) {
++        title = song.title!.first;
++      } else {
++        // Just use filename
++        title = song.file;
++      }
++      String album = "";
++      if (song.album != null) {
++        album = song.album!.first;
++      }
++      String artist = "";
++      if (song.artist != null) {
++        artist = song.artist!.first;
++      }
++      Duration duration = Duration.zero;
++      if (song.duration != null) {
++        duration = song.duration!;
++      }
++      songFile = song.file;
++      //debugPrint(
++      //    "Got song \"$title\" - \"$album\" - \"$artist\" at $songPosition, file \"$songFile\"");
++      ref.read(mediaPlayerStateProvider.notifier).updateCurrent(PlaylistEntry(
++          title: title,
++          album: album,
++          artist: artist,
++          file: songFile,
++          duration: duration,
++          position: songPosition));
++    }
++
++    var status = await eventClient.status();
++    if (status.elapsed != null) {
++      //debugPrint("Using elapsed time ${status.elapsed} s");
++      ref
++          .read(mediaPlayerPositionProvider.notifier)
++          .set(Duration(milliseconds: (status.elapsed! * 1000.0).toInt()));
++    }
++    PlayState playState = PlayState.stopped;
++    if (status.state != null) {
++      switch (status.state!) {
++        case api.MpdState.stop:
++          //debugPrint("status.state = stop");
++          playState = PlayState.stopped;
++          ref.read(mediaPlayerPositionProvider.notifier).pause();
++          break;
++        case api.MpdState.play:
++          //debugPrint("status.state = play");
++          playState = PlayState.playing;
++          ref.read(mediaPlayerPositionProvider.notifier).play();
++          break;
++        case api.MpdState.pause:
++          //debugPrint("status.state = paused");
++          playState = PlayState.paused;
++          ref.read(mediaPlayerPositionProvider.notifier).pause();
++          break;
++        default:
++          break;
++      }
++      ref.read(mediaPlayerStateProvider.notifier).updatePlayState(playState);
++    }
++
++    if (playState != PlayState.playing) {
++      // No need to attempt to load art, exit
++      return;
++    }
++
++    if (!artState.containsKey(songPosition) ||
++        !(artState[songPosition]!.read || artState[songPosition]!.reading)) {
++      if (songFile.isNotEmpty) {
++        readSongArt(songPosition, songFile);
++      } else {
++        // Do not attempt any fallback for providing the art for now
++        debugPrint("No file for position $songPosition, no art");
++        artState[songPosition] = ArtStateEntry(reading: false, read: true);
++        ref
++            .read(playlistArtProvider.notifier)
++            .update(songPosition, Uint8List(0));
++      }
++    }
++  }
++
++  void readSongArt(int position, String file) async {
++    int offset = 0;
++    int size = 0;
++    List<int> bytes = [];
++
++    if (artState.containsKey(position)) {
++      if (artState[position]!.reading) {
++        return;
++      } else {
++        //debugPrint("Reading art for position $position");
++        artState[position]!.reading = true;
++      }
++    } else {
++      artState[position] = ArtStateEntry(reading: true, read: false);
++    }
++    debugPrint("Reading art for \"$file\"");
++    // Work around dart_mpd not escaping spaced strings itself
++    String escapedFile = file.replaceAll(RegExp(r" "), "\\ ");
++    escapedFile = "\"$file\"";
++
++    bool first = true;
++    do {
++      //debugPrint("Reading, offset = $offset, size = $size");
++      var chunk = await client.readpicture(escapedFile, offset);
++      if (chunk != null) {
++        if (chunk.size != null) {
++          if (chunk.size == 0) {
++            if (first) {
++              // No art, exit
++              break;
++            }
++          }
++          size = chunk.size!;
++        }
++        // else unexpected error
++
++        if (chunk.bytes.isNotEmpty) {
++          //debugPrint("Got ${chunk.bytes.length} bytes of album art");
++          bytes = bytes + chunk.bytes;
++          offset += chunk.bytes.length;
++        } else {
++          break;
++        }
++      }
++    } while (offset < size);
++    //debugPrint("Done, offset = $offset, size = $size");
++
++    if (offset == size) {
++      debugPrint("Read $size bytes of album art for $file");
++    } else {
++      // else error, leave art empty
++      bytes.clear();
++    }
++
++    artState[position]!.read = true;
++    artState[position]!.reading = false;
++    ref
++        .read(playlistArtProvider.notifier)
++        .update(position, Uint8List.fromList(bytes));
++  }
++
++  // Player commands
++
++  void play() async {
++    var playState = ref.read(mediaPlayerStateProvider
++        .select((mediaplayer) => mediaplayer.playState));
++    if (playState == PlayState.stopped) {
++      int position = ref.read(mediaPlayerStateProvider
++          .select((mediaplayer) => mediaplayer.playlistPosition));
++      //debugPrint("Calling MPD play, position = $position");
++      if (position >= 0) {
++        client.play(position);
++      }
++    } else if (playState == PlayState.paused) {
++      client.pause(false);
++    }
++  }
++
++  void pause() async {
++    if (ref.read(mediaPlayerStateProvider
++            .select((mediaplayer) => mediaplayer.playState)) ==
++        PlayState.playing) {
++      client.pause(true);
++    }
++  }
++
++  void next() async {
++    if (ref.read(mediaPlayerStateProvider
++            .select((mediaplayer) => mediaplayer.playState)) ==
++        PlayState.playing) {
++      client.next();
++    }
++  }
++
++  void previous() async {
++    if (ref.read(mediaPlayerStateProvider
++            .select((mediaplayer) => mediaplayer.playState)) ==
++        PlayState.playing) {
++      client.previous();
++    }
++  }
++
++  void seek(int milliseconds) async {
++    client.seekcur((milliseconds / 1000.0).toString());
++  }
++
++  void fastForward(int milliseconds) async {
++    if (milliseconds > 0) {
++      client.seekcur("+${(milliseconds / 1000.0).toString()}");
++    }
++  }
++
++  void rewind(int milliseconds) async {
++    if (milliseconds > 0) {
++      client.seekcur("-${(milliseconds / 1000.0).toString()}");
++    }
++  }
++
++  void pickTrack(int position) async {
++    if (position >= 0) {
++      client.play(position);
++    }
++  }
++
++  void loopPlaylist(bool loop) async {}
++}
+diff --git a/lib/data/data_providers/play_controller.dart b/lib/data/data_providers/play_controller.dart
+new file mode 100644
+index 0000000..38ef309
+--- /dev/null
++++ b/lib/data/data_providers/play_controller.dart
+@@ -0,0 +1,40 @@
++import 'package:flutter_ics_homescreen/export.dart';
++
++enum PlaySource { none, media, radio }
++
++class PlayController {
++  final Ref ref;
++  PlaySource source = PlaySource.none;
++
++  PlayController({required this.ref});
++
++  void setSource(PlaySource newSource) {
++    source = newSource;
++  }
++
++  void play() async {
++    switch (source) {
++      case PlaySource.media:
++        ref.read(mpdClientProvider).play();
++        break;
++      case PlaySource.radio:
++        ref.read(radioClientProvider).start();
++        break;
++      default:
++        break;
++    }
++  }
++
++  void pause() async {
++    switch (source) {
++      case PlaySource.media:
++        ref.read(mpdClientProvider).pause();
++        break;
++      case PlaySource.radio:
++        ref.read(radioClientProvider).stop();
++        break;
++      default:
++        break;
++    }
++  }
++}
+diff --git a/lib/data/data_providers/playlist_art_notifier.dart b/lib/data/data_providers/playlist_art_notifier.dart
+new file mode 100644
+index 0000000..417aa9a
+--- /dev/null
++++ b/lib/data/data_providers/playlist_art_notifier.dart
+@@ -0,0 +1,20 @@
++import 'package:flutter_ics_homescreen/export.dart';
++
++class PlaylistArtNotifier extends Notifier<Map<int, Uint8List>> {
++  @override
++  Map<int, Uint8List> build() {
++    return {};
++  }
++
++  void update(int position, Uint8List art) {
++    // Having to copy the Map to trigger notification seems not particularly
++    // efficient, it may make sense to notify against the last position
++    // updated or similar...
++    state[position] = art;
++    state = Map.of(state);
++  }
++
++  void clear() {
++    state = {};
++  }
++}
+diff --git a/lib/data/data_providers/playlist_notifier.dart b/lib/data/data_providers/playlist_notifier.dart
+new file mode 100644
+index 0000000..2936591
+--- /dev/null
++++ b/lib/data/data_providers/playlist_notifier.dart
+@@ -0,0 +1,37 @@
++import 'package:flutter_ics_homescreen/export.dart';
++
++class PlaylistEntry {
++  final String title;
++  final String album;
++  final String artist;
++  final String file;
++  final Duration duration;
++  final int position;
++
++  const PlaylistEntry(
++      {required this.title,
++      required this.album,
++      required this.artist,
++      required this.file,
++      required this.duration,
++      required this.position});
++}
++
++class PlaylistNotifier extends Notifier<List<PlaylistEntry>> {
++  @override
++  List<PlaylistEntry> build() {
++    return [];
++  }
++
++  void update({required List<PlaylistEntry> newPlaylist}) {
++    state = newPlaylist;
++  }
++
++  void add(PlaylistEntry entry) {
++    state.add(entry);
++  }
++
++  void clear() {
++    state = [];
++  }
++}
+diff --git a/lib/data/data_providers/radio_presets_provider.dart b/lib/data/data_providers/radio_presets_provider.dart
+index 9ee68ac..af14997 100644
+--- a/lib/data/data_providers/radio_presets_provider.dart
++++ b/lib/data/data_providers/radio_presets_provider.dart
+@@ -1,6 +1,4 @@
+-import 'dart:io';
+ import 'package:flutter_ics_homescreen/export.dart';
+-import 'package:yaml/yaml.dart';
+ 
+ class RadioPreset {
+   final int frequency;
+diff --git a/lib/data/models/audio_state.dart b/lib/data/models/audio_state.dart
+index cfa550b..60720a8 100644
+--- a/lib/data/models/audio_state.dart
++++ b/lib/data/models/audio_state.dart
+@@ -40,36 +40,6 @@ class AudioState {
+     );
+   }
+ 
+-  Map<String, dynamic> toMap() {
+-    return {
+-      'volume': volume,
+-      'balance': balance,
+-      'fade': fade,
+-      'treble': treble,
+-      'bass': bass,
+-    };
+-  }
+-
+-  factory AudioState.fromMap(Map<String, dynamic> map) {
+-    return AudioState(
+-      volume: map['volume']?.toDouble() ?? 0.0,
+-      balance: map['balance']?.toDouble() ?? 0.0,
+-      fade: map['fade']?.toDouble() ?? 0.0,
+-      treble: map['treble']?.toDouble() ?? 0.0,
+-      bass: map['bass']?.toDouble() ?? 0.0,
+-    );
+-  }
+-
+-  String toJson() => json.encode(toMap());
+-
+-  factory AudioState.fromJson(String source) =>
+-      AudioState.fromMap(json.decode(source));
+-
+-  @override
+-  String toString() {
+-    return 'AudioState(volume: $volume, balance: $balance, fade: $fade, treble: $treble, bass: $bass)';
+-  }
+-
+   @override
+   bool operator ==(Object other) {
+     if (identical(this, other)) return true;
+diff --git a/lib/data/models/mediaplayer_state.dart b/lib/data/models/mediaplayer_state.dart
+new file mode 100644
+index 0000000..f880a1e
+--- /dev/null
++++ b/lib/data/models/mediaplayer_state.dart
+@@ -0,0 +1,49 @@
++import 'package:flutter_ics_homescreen/export.dart';
++import 'package:flutter_ics_homescreen/data/data_providers/playlist_notifier.dart';
++
++enum PlayState { stopped, playing, paused }
++
++@immutable
++class MediaPlayerState {
++  final int playlistPosition;
++  final PlayState playState;
++  final PlaylistEntry? song;
++
++  const MediaPlayerState(
++      {required this.playlistPosition,
++      required this.playState,
++      required this.song});
++
++  const MediaPlayerState.initial()
++      : playlistPosition = -1,
++        playState = PlayState.stopped,
++        song = null;
++
++  MediaPlayerState copyWith(
++      {int? playlistPosition,
++      PlayState? playState,
++      PlaylistEntry? song,
++      Duration? songPosition,
++      Duration? songLength}) {
++    return MediaPlayerState(
++      playlistPosition: playlistPosition ?? this.playlistPosition,
++      playState: playState ?? this.playState,
++      song: song ?? this.song,
++    );
++  }
++
++  @override
++  bool operator ==(Object other) {
++    if (identical(this, other)) return true;
++
++    return other is MediaPlayerState &&
++        other.playlistPosition == playlistPosition &&
++        other.playState == playState &&
++        other.song == song;
++  }
++
++  @override
++  int get hashCode {
++    return playlistPosition.hashCode ^ playState.hashCode ^ song.hashCode;
++  }
++}
+diff --git a/lib/data/models/radio_state.dart b/lib/data/models/radio_state.dart
+index dd307d9..da972fd 100644
+--- a/lib/data/models/radio_state.dart
++++ b/lib/data/models/radio_state.dart
+@@ -43,38 +43,6 @@ class RadioState {
+     );
+   }
+ 
+-  Map<String, dynamic> toMap() {
+-    return {
+-      'freqMin': freqMin,
+-      'freqMax': freqMax,
+-      'freqStep': freqStep,
+-      'freqCurrent': freqCurrent,
+-      'playing': playing,
+-      'scanning': scanning,
+-    };
+-  }
+-
+-  factory RadioState.fromMap(Map<String, dynamic> map) {
+-    return RadioState(
+-      freqMin: map['freqMin']?.toInt().toUnsigned() ?? 0,
+-      freqMax: map['freqMax']?.toInt().toUnsigned() ?? 0,
+-      freqStep: map['freqStep']?.toInt().toUnsigned() ?? 0,
+-      freqCurrent: map['freqCurrent']?.toInt().toUnsigned() ?? 0,
+-      playing: map['playing']?.toBool() ?? false,
+-      scanning: map['scanning']?.toBool() ?? false,
+-    );
+-  }
+-
+-  String toJson() => json.encode(toMap());
+-
+-  factory RadioState.fromJson(String source) =>
+-      RadioState.fromMap(json.decode(source));
+-
+-  @override
+-  String toString() {
+-    return 'RadioState(freqMin: $freqMin, freqMax: $freqMax, freqStep: $freqStep, freqCurrent: $freqCurrent, playing: $playing, scanning: $scanning)';
+-  }
+-
+   @override
+   bool operator ==(Object other) {
+     if (identical(this, other)) return true;
+diff --git a/lib/export.dart b/lib/export.dart
+index a5c5626..e97fd90 100644
+--- a/lib/export.dart
++++ b/lib/export.dart
+@@ -10,6 +10,7 @@ export 'data/models/vehicle.dart';
+ export 'data/models/units.dart';
+ export 'data/models/audio_state.dart';
+ export 'data/models/radio_state.dart';
++export 'data/models/mediaplayer_state.dart';
+ export 'data/models/connections_signals.dart';
+ export 'data/models/hybrid.dart';
+ 
+diff --git a/lib/presentation/common_widget/volume_and_fan_control.dart b/lib/presentation/common_widget/volume_and_fan_control.dart
+index b38e303..765193b 100644
+--- a/lib/presentation/common_widget/volume_and_fan_control.dart
++++ b/lib/presentation/common_widget/volume_and_fan_control.dart
+@@ -19,9 +19,7 @@ class VolumeFanControl extends ConsumerWidget {
+       child: Column(
+         mainAxisAlignment: MainAxisAlignment.center,
+         children: [
+-          Visibility.maintain(
+-              visible: state == AppState.media ? false : true,
+-              child: const VolumeBar()),
++          VolumeBar(),
+           SizedBox(
+             height: gapSize,
+           ),
+diff --git a/lib/presentation/common_widget/volume_bar.dart b/lib/presentation/common_widget/volume_bar.dart
+index b54283e..b966fc9 100644
+--- a/lib/presentation/common_widget/volume_bar.dart
++++ b/lib/presentation/common_widget/volume_bar.dart
+@@ -43,13 +43,21 @@ class VolumeBarState extends ConsumerState<VolumeBar> {
+     });
+   }
+ 
+-  void pause() {}
++  void play() {
++    ref.read(playControllerProvider).play();
++  }
++
++  void pause() {
++    ref.read(playControllerProvider).pause();
++  }
+ 
+   @override
+   Widget build(BuildContext context) {
+     final volumeValue =
+         ref.watch(audioStateProvider.select((audio) => audio.volume));
+     val = volumeValue.toDouble();
++    final isPlaying = ref.watch(playStateProvider);
++
+     return Column(
+       // mainAxisAlignment: MainAxisAlignment.center,
+       // crossAxisAlignment: CrossAxisAlignment.center,
+@@ -166,12 +174,15 @@ class VolumeBarState extends ConsumerState<VolumeBar> {
+               padding: EdgeInsets.zero,
+               color: AGLDemoColors.periwinkleColor,
+               onPressed: () {
+-                pause();
++                if (isPlaying) {
++                  pause();
++                } else {
++                  play();
++                }
+               },
+-              icon: const Icon(
+-                Icons.pause,
+-                size: 30,
+-              )),
++              icon: isPlaying
++                  ? const Icon(Icons.pause, size: 40)
++                  : const Icon(Icons.play_arrow, size: 40)),
+         ),
+       ],
+     );
+diff --git a/lib/presentation/screens/media/media.dart b/lib/presentation/screens/media/media.dart
+index b7ce9e1..e2ba927 100644
+--- a/lib/presentation/screens/media/media.dart
++++ b/lib/presentation/screens/media/media.dart
+@@ -1,7 +1,7 @@
+ import 'package:flutter_ics_homescreen/export.dart';
+ import 'package:flutter_ics_homescreen/presentation/screens/media/media_player.dart';
+ import 'package:flutter_ics_homescreen/presentation/screens/media/radio_player.dart';
+-import 'widgets/media_volume_bar.dart';
++import 'package:flutter_ics_homescreen/data/data_providers/play_controller.dart';
+ import 'media_nav_notifier.dart';
+ import 'player_navigation.dart';
+ 
+@@ -50,6 +50,21 @@ class MediaPage extends StatelessWidget {
+   }
+ }
+ 
++class MediaPlayingStateNotifier extends Notifier<bool> {
++  @override
++  bool build() {
++    return false;
++  }
++
++  set(bool value) {
++    state = value;
++  }
++}
++
++final mediaPlayingStateProvider =
++    NotifierProvider<MediaPlayingStateNotifier, bool>(
++        MediaPlayingStateNotifier.new);
++
+ class Media extends ConsumerStatefulWidget {
+   const Media({super.key});
+ 
+@@ -58,22 +73,44 @@ class Media extends ConsumerStatefulWidget {
+ }
+ 
+ class _MediaState extends ConsumerState<Media> {
+-  //late MediaNavState selectedNav;
+-
+-  //@override
+-  //initState() {
+-  //  selectedNav = ref.read(mediaNavStateProvider);
+-  //  super.initState();
+-  //}
++  @override
++  void initState() {
++    // Set initial source so external control (like the volume bar button)
++    // will work from the start.
++    var navState = ref.read(mediaNavStateProvider);
++    switch (navState) {
++      case MediaNavState.fm:
++        ref.read(playControllerProvider).setSource(PlaySource.radio);
++        break;
++      case MediaNavState.media:
++      default:
++        ref.read(playControllerProvider).setSource(PlaySource.media);
++        break;
++    }
++    super.initState();
++  }
+ 
+   onPressed(MediaNavState type) {
+     setState(() {
+       if (type == MediaNavState.fm) {
+         ref.read(mediaNavStateProvider.notifier).set(MediaNavState.fm);
++        ref.read(playControllerProvider).setSource(PlaySource.radio);
++
++        bool mediaPlaying = false;
++        if (ref.read(mediaPlayerStateProvider).playState == PlayState.playing) {
++          ref.read(mpdClientProvider).pause();
++          mediaPlaying = true;
++        }
++        ref.read(mediaPlayingStateProvider.notifier).set(mediaPlaying);
+         ref.read(radioClientProvider).start();
+       } else if (type == MediaNavState.media) {
+         ref.read(mediaNavStateProvider.notifier).set(MediaNavState.media);
++        ref.read(playControllerProvider).setSource(PlaySource.media);
++
+         ref.read(radioClientProvider).stop();
++        if (ref.read(mediaPlayingStateProvider)) {
++          ref.read(mpdClientProvider).play();
++        }
+       }
+     });
+   }
+@@ -103,11 +140,13 @@ class _MediaState extends ConsumerState<Media> {
+                       : Container(),
+             ),
+           ),
++          /*
+           if (navState == MediaNavState.media || navState == MediaNavState.fm)
+             const Padding(
+               padding: EdgeInsets.symmetric(horizontal: 144, vertical: 23.5),
+               child: CustomVolumeSlider(),
+             ),
++          */
+         ],
+       ),
+     );
+diff --git a/lib/presentation/screens/media/media_player.dart b/lib/presentation/screens/media/media_player.dart
+index d7486c7..0dab346 100644
+--- a/lib/presentation/screens/media/media_player.dart
++++ b/lib/presentation/screens/media/media_player.dart
+@@ -3,38 +3,31 @@ import 'media_player_controls.dart';
+ import 'play_list_table.dart';
+ import 'segmented_buttons.dart';
+ 
+-class MediaPlayer extends StatefulWidget {
++class MediaPlayer extends ConsumerStatefulWidget {
+   const MediaPlayer({super.key});
+ 
+   @override
+-  State<MediaPlayer> createState() => _MediaPlayerState();
++  ConsumerState<MediaPlayer> createState() => _MediaPlayerState();
+ }
+ 
+-class _MediaPlayerState extends State<MediaPlayer> {
+-  String selectedNav = "Bluetooth";
+-  List<String> navItems = ["Bluetooth", "SD", "USB"];
+-
+-  late String songName = "Feel Good Inc.";
+-
+-  String tableName = "2000’s Dance Hits";
+-  List<PlayListModel> playList = [
+-    PlayListModel(songName: "Feel Good Inc.", albumName: "Gorillaz"),
+-    PlayListModel(
+-        songName: "Hips Don’t Lie", albumName: "Shakira, Wyclef Jean"),
+-    PlayListModel(songName: "AG1", albumName: "Paid Advertisement"),
+-    PlayListModel(songName: "Hey Ya!", albumName: "Outkast"),
+-    PlayListModel(songName: "One, Two, Step", albumName: "Ciara, Missy Elliot"),
+-    PlayListModel(songName: "Don’t Trust Me", albumName: "3OH!3"),
+-  ];
+-  String selectedPlayListSongName = "Feel Good Inc.";
++class _MediaPlayerState extends ConsumerState<MediaPlayer> {
++  String selectedNav = "USB";
++  List<String> navItems = ["USB", "SD", "Bluetooth"];
+ 
+   @override
+   Widget build(BuildContext context) {
+-    double albumArtSize = 460;
++    double albumArtSize = 400;
++    final playlistPosition = ref.watch(mediaPlayerStateProvider
++        .select((mediaplayer) => mediaplayer.playlistPosition));
++    final playlistArt = ref.watch(playlistArtProvider);
++    Uint8List art = Uint8List(0);
++    if (playlistArt.containsKey(playlistPosition)) {
++      art = playlistArt[playlistPosition]!;
++    }
++
+     return Column(
+       crossAxisAlignment: CrossAxisAlignment.stretch,
+       children: [
+-        //const PlayerNavigation(),
+         SegmentedButtons(
+           navItems: navItems,
+           selectedNav: selectedNav,
+@@ -45,11 +38,20 @@ class _MediaPlayerState extends State<MediaPlayer> {
+         Row(
+           mainAxisAlignment: MainAxisAlignment.center,
+           children: [
+-            Image.asset(
+-              "assets/AlbumArtMedia.png",
+-              width: albumArtSize,
+-              height: albumArtSize,
+-            )
++            art.isNotEmpty
++                ? Image.memory(art,
++                    width: albumArtSize,
++                    height: albumArtSize,
++                    fit: BoxFit.contain)
++                : Container(
++                    width: albumArtSize,
++                    height: albumArtSize,
++                    color: AGLDemoColors.jordyBlueColor.withOpacity(0.2),
++                    child: Icon(
++                      Icons.music_note,
++                      size: albumArtSize,
++                      color: AGLDemoColors.jordyBlueColor,
++                    ))
+           ],
+         ),
+         const SizedBox(
+@@ -58,19 +60,11 @@ class _MediaPlayerState extends State<MediaPlayer> {
+         Column(
+           crossAxisAlignment: CrossAxisAlignment.stretch,
+           children: [
+-            MediaPlayerControls(
+-                songName: songName,
+-                songLengthStart: "-1:23",
+-                songLengthStop: "5:03"),
++            MediaPlayerControls(),
+             const SizedBox(
+-              height: 72,
+-            ),
+-            PlayListTable(
+-              playList: playList,
+-              selectedPlayListSongName: selectedPlayListSongName,
+-              tableName: tableName,
+-              type: "media",
++              height: 12,
+             ),
++            PlayListTable(),
+           ],
+         )
+       ],
+diff --git a/lib/presentation/screens/media/media_player_controls.dart b/lib/presentation/screens/media/media_player_controls.dart
+index 518b669..26cdfce 100644
+--- a/lib/presentation/screens/media/media_player_controls.dart
++++ b/lib/presentation/screens/media/media_player_controls.dart
+@@ -1,40 +1,49 @@
+ import 'package:flutter_ics_homescreen/core/utils/helpers.dart';
+ import 'package:flutter_ics_homescreen/export.dart';
+-import 'package:flutter_ics_homescreen/presentation/screens/media/widgets/gradient_progress_indicator.dart';
++import 'package:flutter_ics_homescreen/presentation/screens/settings/settings_screens/audio_settings/widget/slider_widgets.dart';
+ 
+-class MediaPlayerControls extends StatefulWidget {
+-  const MediaPlayerControls(
+-      {super.key,
+-      required this.songName,
+-      required this.songLengthStart,
+-      required this.songLengthStop});
++// Time to string helper, returns HH:MM:SS or MM:SS as appropriate
++String timeToString(Duration time) {
++  String result = "";
++  if (time > const Duration(minutes: 59, seconds: 59)) {
++    result = time.toString().split('.').first.padLeft(8, "0");
++  } else {
++    result = time.toString().substring(2, 7);
++  }
++  return result;
++}
+ 
+-  final String songName;
+-  final String songLengthStart;
+-  final String songLengthStop;
++class MediaPlayerControls extends ConsumerStatefulWidget {
++  const MediaPlayerControls({super.key});
+ 
+   @override
+-  State<MediaPlayerControls> createState() => _MediaPlayerControlsState();
++  ConsumerState<MediaPlayerControls> createState() =>
++      _MediaPlayerControlsState();
+ }
+ 
+-class _MediaPlayerControlsState extends State<MediaPlayerControls> {
+-  late String songName;
+-  late String songLengthStart;
+-  late String songLengthStop;
+-  final String albumName = "Gorillaz";
+-
+-  int songProgress = 20;
+-
+-  @override
+-  void initState() {
+-    songName = widget.songName;
+-    songLengthStart = widget.songLengthStart;
+-    songLengthStop = widget.songLengthStop;
+-    super.initState();
+-  }
++class _MediaPlayerControlsState extends ConsumerState<MediaPlayerControls> {
++  //@override
++  //void initState() {
++  //  super.initState();
++  //}
+ 
+   @override
+   Widget build(BuildContext context) {
++    var currentSong = ref.watch(
++        mediaPlayerStateProvider.select((mediaplayer) => mediaplayer.song));
++    var songPosition = ref.watch(mediaPlayerPositionProvider);
++
++    String songName = "";
++    String songDetail = "";
++    String songPositionString = "00:00";
++    String songLengthString = "00:00";
++    if (currentSong != null) {
++      songName = currentSong.title;
++      songDetail = currentSong.artist;
++      songLengthString = timeToString(currentSong.duration);
++    }
++    songPositionString = timeToString(songPosition);
++
+     return Material(
+       color: Colors.transparent,
+       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+@@ -46,42 +55,25 @@ class _MediaPlayerControlsState extends State<MediaPlayerControls> {
+               shadows: [Helpers.dropShadowRegular],
+               fontSize: 44),
+         ),
+-        MediaPlayerControlsubDetails(
+-          albumName: albumName,
++        MediaPlayerControlsDetails(
++          songDetail: songDetail,
+         ),
+         Column(children: [
+-          GradientProgressIndicator(
+-            percent: songProgress,
+-            type: "media",
+-            gradient: LinearGradient(
+-                begin: Alignment.centerLeft,
+-                end: Alignment.centerRight,
+-                colors: [
+-                  AGLDemoColors.jordyBlueColor,
+-                  AGLDemoColors.jordyBlueColor.withOpacity(0.8),
+-                ]),
+-            backgroundColor: AGLDemoColors.gradientBackgroundDarkColor,
+-          ),
+-          // const LinearProgressIndicator(
+-          //   backgroundColor: AGLDemoColors.gradientBackgroundDarkColor,
+-          //   color: Colors.white70,
+-          //   minHeight: 8,
+-          //   value: 0.7,
+-          // ),
++          const MediaPlayerControlsSlider(),
+           Padding(
+             padding: const EdgeInsets.symmetric(vertical: 5),
+             child: Row(
+               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+               children: [
+                 Text(
+-                  songLengthStart,
++                  songPositionString,
+                   style: TextStyle(
+                       color: Colors.white,
+                       fontSize: 26,
+                       shadows: [Helpers.dropShadowRegular]),
+                 ),
+                 Text(
+-                  songLengthStop,
++                  songLengthString,
+                   style: TextStyle(
+                       color: Colors.white,
+                       fontSize: 26,
+@@ -91,23 +83,23 @@ class _MediaPlayerControlsState extends State<MediaPlayerControls> {
+             ),
+           ),
+         ]),
+-        const MediaPlayerActions(),
++        const MediaPlayerControlsActions(),
+       ]),
+     );
+   }
+ }
+ 
+-class MediaPlayerControlsubDetails extends StatefulWidget {
+-  const MediaPlayerControlsubDetails({super.key, required this.albumName});
+-  final String albumName;
++class MediaPlayerControlsDetails extends StatefulWidget {
++  const MediaPlayerControlsDetails({super.key, required this.songDetail});
++  final String songDetail;
+ 
+   @override
+-  State<MediaPlayerControlsubDetails> createState() =>
+-      _MediaPlayerControlsubDetailsState();
++  State<MediaPlayerControlsDetails> createState() =>
++      _MediaPlayerControlsDetailsState();
+ }
+ 
+-class _MediaPlayerControlsubDetailsState
+-    extends State<MediaPlayerControlsubDetails> {
++class _MediaPlayerControlsDetailsState
++    extends State<MediaPlayerControlsDetails> {
+   bool isShuffleEnabled = false;
+   bool isRepeatEnabled = false;
+   @override
+@@ -116,7 +108,7 @@ class _MediaPlayerControlsubDetailsState
+       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+       children: [
+         Text(
+-          widget.albumName,
++          widget.songDetail,
+           style: TextStyle(
+               color: Colors.white,
+               fontWeight: FontWeight.w400,
+@@ -158,25 +150,98 @@ class _MediaPlayerControlsubDetailsState
+   }
+ }
+ 
+-class MediaPlayerActions extends StatefulWidget {
+-  const MediaPlayerActions({super.key});
++class MediaPlayerControlsSlider extends ConsumerStatefulWidget {
++  const MediaPlayerControlsSlider({super.key});
++
++  @override
++  ConsumerState<MediaPlayerControlsSlider> createState() =>
++      MediaPlayerControlsSliderState();
++}
++
++class MediaPlayerControlsSliderState
++    extends ConsumerState<MediaPlayerControlsSlider> {
++  //late Duration songPosition;
++
++  //@override
++  //void initState() {
++  //  songPosition = ref.read(mediaPlayerPositionProvider);
++  //  super.initState();
++  //}
++
++  @override
++  Widget build(BuildContext context) {
++    var currentSong = ref.watch(
++        mediaPlayerStateProvider.select((mediaplayer) => mediaplayer.song));
++    var songPosition = ref.watch(mediaPlayerPositionProvider);
++
++    Duration songLength = Duration.zero;
++    if (currentSong != null) {
++      songLength = currentSong.duration;
++    }
++
++    return Container(
++      height: 80,
++      child: SliderTheme(
++        data: SliderThemeData(
++          overlayShape: SliderComponentShape.noOverlay,
++          valueIndicatorShape: SliderComponentShape.noOverlay,
++          activeTickMarkColor: Colors.transparent,
++          inactiveTickMarkColor: Colors.transparent,
++          inactiveTrackColor: AGLDemoColors.periwinkleColor,
++          thumbShape: const PolygonSliderThumb(sliderValue: 3, thumbRadius: 23),
++          //trackHeight: 5,
++        ),
++        child: Slider(
++          max: songLength.inMilliseconds.toDouble(),
++          value: songPosition.inMilliseconds.toDouble(),
++          onChangeStart: (double value) {
++            // Disable timer so position will not change while control is
++            // being dragged.  It will be re-enabled via the playback state
++            // update from MPD.
++            ref.read(mediaPlayerPositionProvider.notifier).pause();
++          },
++          onChanged: (double newValue) {
++            setState(() {
++              ref
++                  .read(mediaPlayerPositionProvider.notifier)
++                  .set(Duration(milliseconds: newValue.toInt()));
++            });
++          },
++          onChangeEnd: (double newValue) {
++            ref.read(mpdClientProvider).seek(newValue.toInt());
++          },
++        ),
++      ),
++    );
++  }
++}
++
++class MediaPlayerControlsActions extends ConsumerStatefulWidget {
++  const MediaPlayerControlsActions({super.key});
+ 
+   @override
+-  State<MediaPlayerActions> createState() => _MediaPlayerActionsState();
++  ConsumerState<MediaPlayerControlsActions> createState() =>
++      _MediaPlayerControlsActionsState();
+ }
+ 
+-class _MediaPlayerActionsState extends State<MediaPlayerActions> {
++class _MediaPlayerControlsActionsState
++    extends ConsumerState<MediaPlayerControlsActions> {
+   bool isPressed = false;
+-  bool isPlaying = true;
+ 
+   @override
+   Widget build(BuildContext context) {
++    bool isPlaying = ref.watch(mediaPlayerStateProvider
++            .select((mediaplayer) => mediaplayer.playState)) ==
++        PlayState.playing;
++
+     return Row(
+       mainAxisAlignment: MainAxisAlignment.center,
+       children: [
+         InkWell(
+             customBorder: const CircleBorder(),
+-            onTap: () {},
++            onTap: () {
++              ref.read(mpdClientProvider).previous();
++            },
+             child: Padding(
+               padding: const EdgeInsets.all(8.0),
+               child: SvgPicture.asset(
+@@ -191,7 +256,11 @@ class _MediaPlayerActionsState extends State<MediaPlayerActions> {
+             customBorder: const CircleBorder(),
+             onTap: () {
+               setState(() {
+-                isPlaying = !isPlaying;
++                if (isPlaying) {
++                  ref.read(mpdClientProvider).pause();
++                } else {
++                  ref.read(mpdClientProvider).play();
++                }
+               });
+             },
+             onTapDown: (details) {
+@@ -221,7 +290,9 @@ class _MediaPlayerActionsState extends State<MediaPlayerActions> {
+         ),
+         InkWell(
+             customBorder: const CircleBorder(),
+-            onTap: () {},
++            onTap: () {
++              ref.read(mpdClientProvider).next();
++            },
+             child: Padding(
+               padding: const EdgeInsets.all(8.0),
+               child: SvgPicture.asset(
+diff --git a/lib/presentation/screens/media/play_list_table.dart b/lib/presentation/screens/media/play_list_table.dart
+index 369bb9c..71d2fc9 100644
+--- a/lib/presentation/screens/media/play_list_table.dart
++++ b/lib/presentation/screens/media/play_list_table.dart
+@@ -2,38 +2,29 @@ import 'package:auto_size_text/auto_size_text.dart';
+ import 'package:flutter_ics_homescreen/core/utils/helpers.dart';
+ import 'package:flutter_ics_homescreen/export.dart';
+ 
+-class PlayListTable extends StatefulWidget {
+-  const PlayListTable(
+-      {super.key,
+-      required this.type,
+-      required this.tableName,
+-      required this.playList,
+-      required this.selectedPlayListSongName});
+-  final String type;
+-  final String tableName;
+-  final List<PlayListModel> playList;
+-  final String selectedPlayListSongName;
++class PlayListTable extends ConsumerStatefulWidget {
++  PlayListTable({super.key});
+ 
+   @override
+-  State<PlayListTable> createState() => _PlayListTableState();
++  ConsumerState<PlayListTable> createState() => _PlayListTableState();
+ }
+ 
+-class _PlayListTableState extends State<PlayListTable> {
++class _PlayListTableState extends ConsumerState<PlayListTable> {
+   bool isAudioSettingsEnabled = false;
+-  late String tableName;
+-  late List<PlayListModel> playList;
+-  late String selectedPlayListSongName;
+ 
+-  @override
+-  void initState() {
+-    tableName = widget.tableName;
+-    playList = widget.playList;
+-    selectedPlayListSongName = widget.selectedPlayListSongName;
+-    super.initState();
+-  }
++  //@override
++  //void initState() {
++  //  super.initState();
++  //}
+ 
+   @override
+   Widget build(BuildContext context) {
++    final controller = ScrollController();
++    var playlist = ref.watch(playlistProvider);
++    var selectedPosition = ref.watch(mediaPlayerStateProvider
++        .select((mediaplayer) => mediaplayer.playlistPosition));
++    late String tableName = "USB";
++
+     return Material(
+         color: Colors.transparent,
+         child: Column(
+@@ -51,19 +42,18 @@ class _PlayListTableState extends State<PlayListTable> {
+                           fontWeight: FontWeight.w400,
+                           fontSize: 40),
+                     ),
+-                    if (widget.type == "media")
+-                      InkWell(
+-                          customBorder: const CircleBorder(),
+-                          onTap: () {},
+-                          child: Opacity(
+-                            opacity: 0.5,
+-                            child: Padding(
+-                                padding: const EdgeInsets.all(8.0),
+-                                child: SvgPicture.asset(
+-                                  "assets/AppleMusic.svg",
+-                                  width: 32,
+-                                )),
+-                          )),
++                    InkWell(
++                        customBorder: const CircleBorder(),
++                        onTap: () {},
++                        child: Opacity(
++                          opacity: 0.5,
++                          child: Padding(
++                              padding: const EdgeInsets.all(8.0),
++                              child: SvgPicture.asset(
++                                "assets/AppleMusic.svg",
++                                width: 32,
++                              )),
++                        )),
+                   ],
+                 ),
+                 InkWell(
+@@ -81,77 +71,119 @@ class _PlayListTableState extends State<PlayListTable> {
+                         )))
+               ],
+             ),
+-            SizedBox(
+-              height: 325,
+-              child: SingleChildScrollView(
+-                child: Column(
+-                    children: playList.map((index) {
+-                  return Container(
+-                    height: 100,
+-                    margin: const EdgeInsets.symmetric(vertical: 4),
+-                    decoration: BoxDecoration(
+-                        border: Border(
+-                            left: selectedPlayListSongName == index.songName
+-                                ? const BorderSide(
+-                                    color: Colors.white, width: 4)
+-                                : BorderSide.none),
+-                        gradient: LinearGradient(
+-                            colors: selectedPlayListSongName == index.songName
+-                                ? [
+-                                    AGLDemoColors.neonBlueColor,
+-                                    AGLDemoColors.neonBlueColor
+-                                        .withOpacity(0.15)
+-                                  ]
+-                                : [
+-                                    Colors.black,
+-                                    Colors.black.withOpacity(0.20)
+-                                  ])),
+-                    child: InkWell(
+-                      onTap: () {
+-                        setState(() {
+-                          selectedPlayListSongName = index.songName;
+-                        });
+-                      },
+-                      child: Padding(
+-                        padding: const EdgeInsets.symmetric(
+-                            vertical: 17, horizontal: 24),
+-                        child: Row(
+-                          children: [
+-                            Expanded(
+-                                flex: 6,
+-                                child: AutoSizeText(
+-                                  index.songName,
+-                                  maxLines: 1,
+-                                  style: TextStyle(
+-                                      color: Colors.white,
+-                                      fontSize: 40,
+-                                      shadows: [Helpers.dropShadowRegular]),
+-                                )),
+-                            Expanded(
+-                                flex: 4,
+-                                child: Text(
+-                                  index.albumName,
+-                                  style: TextStyle(
+-                                      color: Colors.white,
+-                                      fontSize: 26,
+-                                      shadows: [Helpers.dropShadowRegular]),
+-                                ))
+-                          ],
+-                        ),
+-                      ),
+-                    ),
+-                  );
+-                }).toList()),
+-              ),
+-            ),
++            Padding(
++                padding: const EdgeInsets.only(right: 12),
++                child: SizedBox(
++                    height: 500,
++                    child: RawScrollbar(
++                        controller: controller,
++                        thickness: 32,
++                        thumbVisibility: true,
++                        radius: const Radius.circular(10),
++                        thumbColor: AGLDemoColors.periwinkleColor,
++                        minThumbLength: 60,
++                        interactive: true,
++                        child: ScrollConfiguration(
++                            behavior: ScrollConfiguration.of(context).copyWith(
++                              scrollbars: false,
++                              overscroll: false,
++                            ),
++                            child: CustomScrollView(
++                                controller: controller,
++                                physics: const ClampingScrollPhysics(),
++                                slivers: <Widget>[
++                                  SliverList.separated(
++                                    itemCount: playlist.length,
++                                    itemBuilder: (_, int index) {
++                                      return Container(
++                                        height: 92,
++                                        margin:
++                                            const EdgeInsets.only(right: 44),
++                                        decoration: BoxDecoration(
++                                            border: Border(
++                                                left: selectedPosition ==
++                                                        playlist[index].position
++                                                    ? const BorderSide(
++                                                        color: Colors.white,
++                                                        width: 4)
++                                                    : BorderSide.none),
++                                            gradient: LinearGradient(
++                                                colors: selectedPosition ==
++                                                        playlist[index].position
++                                                    ? [
++                                                        AGLDemoColors
++                                                            .neonBlueColor,
++                                                        AGLDemoColors
++                                                            .neonBlueColor
++                                                            .withOpacity(0.15)
++                                                      ]
++                                                    : [
++                                                        Colors.black,
++                                                        Colors.black
++                                                            .withOpacity(0.20)
++                                                      ])),
++                                        child: InkWell(
++                                          onTap: () {
++                                            setState(() {
++                                              selectedPosition =
++                                                  playlist[index].position;
++                                              ref
++                                                  .read(mpdClientProvider)
++                                                  .pickTrack(
++                                                      playlist[index].position);
++                                            });
++                                          },
++                                          child: Padding(
++                                            padding: const EdgeInsets.symmetric(
++                                                vertical: 17, horizontal: 24),
++                                            child: Column(
++                                              children: [
++                                                Expanded(
++                                                    flex: 6,
++                                                    child: Align(
++                                                        alignment: Alignment
++                                                            .centerLeft,
++                                                        child: AutoSizeText(
++                                                          playlist[index].title,
++                                                          maxLines: 1,
++                                                          style: TextStyle(
++                                                              color:
++                                                                  Colors.white,
++                                                              fontSize: 40,
++                                                              shadows: [
++                                                                Helpers
++                                                                    .dropShadowRegular
++                                                              ]),
++                                                        ))),
++                                                Expanded(
++                                                    flex: 4,
++                                                    child: Align(
++                                                        alignment: Alignment
++                                                            .centerLeft,
++                                                        child: Text(
++                                                          playlist[index]
++                                                              .artist,
++                                                          style: TextStyle(
++                                                              color:
++                                                                  Colors.white,
++                                                              fontSize: 22,
++                                                              shadows: [
++                                                                Helpers
++                                                                    .dropShadowRegular
++                                                              ]),
++                                                        )))
++                                              ],
++                                            ),
++                                          ),
++                                        ),
++                                      );
++                                    },
++                                    separatorBuilder: (_, __) {
++                                      return SizedBox(height: 8);
++                                    },
++                                  ),
++                                ]))))),
+           ],
+         ));
+   }
+ }
+-
+-class PlayListModel {
+-  final String songName;
+-  final String albumName;
+-
+-  PlayListModel({required this.songName, required this.albumName});
+-}
+diff --git a/lib/presentation/screens/media/radio_player.dart b/lib/presentation/screens/media/radio_player.dart
+index 4531c7b..f6695f1 100644
+--- a/lib/presentation/screens/media/radio_player.dart
++++ b/lib/presentation/screens/media/radio_player.dart
+@@ -34,8 +34,8 @@ class _RadioPlayerState extends ConsumerState<RadioPlayer> {
+ 
+   @override
+   Widget build(BuildContext context) {
+-    double fmSignalHeight = 460;
+-    double fmSignalWidth = 460;
++    double fmSignalHeight = 400;
++    double fmSignalWidth = 400;
+ 
+     return Container(
+       padding: const EdgeInsets.only(left: 7, right: 7),
+diff --git a/lib/presentation/screens/media/radio_player_controls.dart b/lib/presentation/screens/media/radio_player_controls.dart
+index bfa8da6..acc8291 100644
+--- a/lib/presentation/screens/media/radio_player_controls.dart
++++ b/lib/presentation/screens/media/radio_player_controls.dart
+@@ -10,6 +10,12 @@ class RadioPlayerControls extends ConsumerWidget {
+     var freqCurrent =
+         ref.watch(radioStateProvider.select((radio) => radio.freqCurrent));
+     String currentString = (freqCurrent / 1000000.0).toStringAsFixed(1);
++    var freqMin =
++        ref.watch(radioStateProvider.select((radio) => radio.freqMin));
++    String freqMinString = (freqMin / 1000000.0).toStringAsFixed(1);
++    var freqMax =
++        ref.watch(radioStateProvider.select((radio) => radio.freqMax));
++    String freqMaxString = (freqMax / 1000000.0).toStringAsFixed(1);
+ 
+     return Material(
+       color: Colors.transparent,
+@@ -24,16 +30,40 @@ class RadioPlayerControls extends ConsumerWidget {
+                 shadows: [Helpers.dropShadowRegular],
+                 fontSize: 44),
+           ),
+-          const RadioPlayerControlsSubDetails(),
+-          const RadioPlayerControlsSlider(),
++          const RadioPlayerControlsActions(),
++          Column(children: [
++            const RadioPlayerControlsSlider(),
++            Padding(
++              padding: const EdgeInsets.symmetric(vertical: 5),
++              child: Row(
++                mainAxisAlignment: MainAxisAlignment.spaceBetween,
++                children: [
++                  Text(
++                    freqMinString,
++                    style: TextStyle(
++                        color: Colors.white,
++                        fontSize: 26,
++                        shadows: [Helpers.dropShadowRegular]),
++                  ),
++                  Text(
++                    freqMaxString,
++                    style: TextStyle(
++                        color: Colors.white,
++                        fontSize: 26,
++                        shadows: [Helpers.dropShadowRegular]),
++                  )
++                ],
++              ),
++            ),
++          ]),
+         ],
+       ),
+     );
+   }
+ }
+ 
+-class RadioPlayerControlsSubDetails extends ConsumerWidget {
+-  const RadioPlayerControlsSubDetails({super.key});
++class RadioPlayerControlsActions extends ConsumerWidget {
++  const RadioPlayerControlsActions({super.key});
+ 
+   onPressed({required WidgetRef ref, required String type}) {
+     if (type == "tuneLeft") {
+@@ -174,78 +204,40 @@ class RadioPlayerControlsSliderState
+         ref.watch(radioStateProvider.select((radio) => radio.freqCurrent)) /
+             1000000.0;
+ 
+-    String minString = (freqMin / 1000000.0).toStringAsFixed(1);
+-    String maxString = (freqMax / 1000000.0).toStringAsFixed(1);
+-
+-    return Padding(
+-        padding: const EdgeInsets.symmetric(horizontal: 64),
+-        child: Container(
+-          decoration: const ShapeDecoration(
+-            color: AGLDemoColors.buttonFillEnabledColor,
+-            shape: StadiumBorder(
+-                side: BorderSide(
+-              color: Color(0xFF5477D4),
+-              width: 0.5,
+-            )),
+-          ),
+-          height: 160,
+-          child: Row(
+-            children: [
+-              Padding(
+-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+-                  child: Text(
+-                    minString,
+-                    style: TextStyle(
+-                        color: Colors.white,
+-                        fontSize: 32,
+-                        shadows: [Helpers.dropShadowRegular]),
+-                  )),
+-              Expanded(
+-                child: SliderTheme(
+-                  data: SliderThemeData(
+-                    overlayShape: SliderComponentShape.noOverlay,
+-                    valueIndicatorShape: SliderComponentShape.noOverlay,
+-                    activeTickMarkColor: Colors.transparent,
+-                    inactiveTickMarkColor: Colors.transparent,
+-                    inactiveTrackColor: AGLDemoColors.backgroundInsetColor,
+-                    thumbShape: const PolygonSliderThumb(
+-                        sliderValue: 3, thumbRadius: 23),
+-                    //trackHeight: 5,
+-                  ),
+-                  child: Slider(
+-                    divisions: (freqMax - freqMin) ~/ freqStep,
+-                    min: freqMin / 1000000.0,
+-                    max: freqMax / 1000000.0,
+-                    value: currentFreq,
+-                    onChangeStart: (double value) {
+-                      ref.read(radioClientProvider).scanStop();
+-                    },
+-                    onChanged: (double value) {
+-                      setState(() {
+-                        ref
+-                            .read(radioStateProvider.notifier)
+-                            .updateFrequency((value * 1000000.0).toInt());
+-                      });
+-                    },
+-                    onChangeEnd: (double value) {
+-                      ref
+-                          .read(radioStateProvider.notifier)
+-                          .setFrequency((value * 1000000.0).toInt());
+-                    },
+-                  ),
+-                ),
+-              ),
+-              Padding(
+-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+-                  child: Text(
+-                    maxString,
+-                    style: TextStyle(
+-                        color: Colors.white,
+-                        fontSize: 32,
+-                        shadows: [Helpers.dropShadowRegular]),
+-                  )),
+-            ],
+-          ),
+-        ));
++    return Container(
++      height: 80,
++      child: SliderTheme(
++        data: SliderThemeData(
++          overlayShape: SliderComponentShape.noOverlay,
++          valueIndicatorShape: SliderComponentShape.noOverlay,
++          activeTickMarkColor: Colors.transparent,
++          inactiveTickMarkColor: Colors.transparent,
++          inactiveTrackColor: AGLDemoColors.periwinkleColor,
++          thumbShape: const PolygonSliderThumb(sliderValue: 3, thumbRadius: 23),
++          //trackHeight: 5,
++        ),
++        child: Slider(
++          divisions: (freqMax - freqMin) ~/ freqStep,
++          min: freqMin / 1000000.0,
++          max: freqMax / 1000000.0,
++          value: currentFreq,
++          onChangeStart: (double value) {
++            ref.read(radioClientProvider).scanStop();
++          },
++          onChanged: (double value) {
++            setState(() {
++              ref
++                  .read(radioStateProvider.notifier)
++                  .updateFrequency((value * 1000000.0).toInt());
++            });
++          },
++          onChangeEnd: (double value) {
++            ref
++                .read(radioStateProvider.notifier)
++                .setFrequency((value * 1000000.0).toInt());
++          },
++        ),
++      ),
++    );
+   }
+ }
+diff --git a/lib/presentation/screens/media/radio_preset_table.dart b/lib/presentation/screens/media/radio_preset_table.dart
+index 816bcb9..97affb8 100644
+--- a/lib/presentation/screens/media/radio_preset_table.dart
++++ b/lib/presentation/screens/media/radio_preset_table.dart
+@@ -38,6 +38,8 @@ class _RadioPresetTableState extends ConsumerState<RadioPresetTable> {
+ 
+   @override
+   Widget build(BuildContext context) {
++    final controller = ScrollController();
++
+     return Material(
+         color: Colors.transparent,
+         child: Column(
+@@ -72,72 +74,112 @@ class _RadioPresetTableState extends ConsumerState<RadioPresetTable> {
+                         )))
+               ],
+             ),
+-            SizedBox(
+-              height: 325,
+-              child: SingleChildScrollView(
+-                child: Column(
+-                    children: presets.map((index) {
+-                  return Container(
+-                    height: 100,
+-                    margin: const EdgeInsets.symmetric(vertical: 4),
+-                    decoration: BoxDecoration(
+-                        border: Border(
+-                            left: selectedPreset == index.name
+-                                ? const BorderSide(
+-                                    color: Colors.white, width: 4)
+-                                : BorderSide.none),
+-                        gradient: LinearGradient(
+-                            colors: selectedPreset == index.name
+-                                ? [
+-                                    AGLDemoColors.neonBlueColor,
+-                                    AGLDemoColors.neonBlueColor
+-                                        .withOpacity(0.15)
+-                                  ]
+-                                : [
+-                                    Colors.black,
+-                                    Colors.black.withOpacity(0.20)
+-                                  ])),
+-                    child: InkWell(
+-                      onTap: () {
+-                        ref
+-                            .read(radioClientProvider)
+-                            .setFrequency(index.frequency);
+-                        setState(() {
+-                          selectedPreset = index.name;
+-                        });
+-                      },
+-                      child: Padding(
+-                        padding: const EdgeInsets.symmetric(
+-                            vertical: 17, horizontal: 24),
+-                        child: Row(
+-                          children: [
+-                            Expanded(
+-                                flex: 6,
+-                                child: AutoSizeText(
+-                                  index.name,
+-                                  maxLines: 1,
+-                                  style: TextStyle(
+-                                      color: Colors.white,
+-                                      fontSize: 40,
+-                                      shadows: [Helpers.dropShadowRegular]),
+-                                )),
+-                            Expanded(
+-                                flex: 4,
+-                                child: Text(
+-                                  frequencyToString(index.frequency),
+-                                  style: TextStyle(
+-                                      color: Colors.white,
+-                                      fontSize: 26,
+-                                      shadows: [Helpers.dropShadowRegular]),
+-                                ))
+-                          ],
++            Padding(
++                padding: const EdgeInsets.only(right: 12),
++                child: SizedBox(
++                  height: 500,
++                  child: RawScrollbar(
++                    controller: controller,
++                    thickness: 32,
++                    thumbVisibility: true,
++                    radius: const Radius.circular(10),
++                    thumbColor: AGLDemoColors.periwinkleColor,
++                    minThumbLength: 60,
++                    interactive: true,
++                    child: ScrollConfiguration(
++                        behavior: ScrollConfiguration.of(context).copyWith(
++                          scrollbars: false,
++                          overscroll: false,
+                         ),
+-                      ),
+-                    ),
+-                  );
+-                }).toList()),
+-              ),
+-            ),
++                        child: CustomScrollView(
++                            controller: controller,
++                            physics: const ClampingScrollPhysics(),
++                            slivers: <Widget>[
++                              SliverList.separated(
++                                itemCount: presets.length,
++                                itemBuilder: (_, int index) {
++                                  return Container(
++                                    height: 92,
++                                    margin: const EdgeInsets.only(right: 44),
++                                    decoration: BoxDecoration(
++                                        border: Border(
++                                            left: selectedPreset ==
++                                                    presets[index].name
++                                                ? const BorderSide(
++                                                    color: Colors.white,
++                                                    width: 4)
++                                                : BorderSide.none),
++                                        gradient: LinearGradient(
++                                            colors: selectedPreset ==
++                                                    presets[index].name
++                                                ? [
++                                                    AGLDemoColors.neonBlueColor,
++                                                    AGLDemoColors.neonBlueColor
++                                                        .withOpacity(0.15)
++                                                  ]
++                                                : [
++                                                    Colors.black,
++                                                    Colors.black
++                                                        .withOpacity(0.20)
++                                                  ])),
++                                    child: InkWell(
++                                      onTap: () {
++                                        ref
++                                            .read(radioClientProvider)
++                                            .setFrequency(
++                                                presets[index].frequency);
++                                        setState(() {
++                                          selectedPreset = presets[index].name;
++                                        });
++                                      },
++                                      child: Padding(
++                                        padding: const EdgeInsets.symmetric(
++                                            vertical: 17, horizontal: 24),
++                                        child: Row(
++                                          children: [
++                                            Expanded(
++                                                flex: 6,
++                                                child: AutoSizeText(
++                                                  presets[index].name,
++                                                  maxLines: 1,
++                                                  style: TextStyle(
++                                                      color: Colors.white,
++                                                      fontSize: 32,
++                                                      shadows: [
++                                                        Helpers
++                                                            .dropShadowRegular
++                                                      ]),
++                                                )),
++                                            Expanded(
++                                                flex: 4,
++                                                child: Align(
++                                                    alignment:
++                                                        Alignment.centerRight,
++                                                    child: Text(
++                                                      frequencyToString(
++                                                          presets[index]
++                                                              .frequency),
++                                                      style: TextStyle(
++                                                          color: Colors.white,
++                                                          fontSize: 24,
++                                                          shadows: [
++                                                            Helpers
++                                                                .dropShadowRegular
++                                                          ]),
++                                                    )))
++                                          ],
++                                        ),
++                                      ),
++                                    ),
++                                  );
++                                },
++                                separatorBuilder: (_, __) {
++                                  return SizedBox(height: 8);
++                                },
++                              ),
++                            ])),
++                  ),
++                )),
+           ],
+         ));
+   }
+diff --git a/lib/presentation/screens/splash/widget/splash_content.dart b/lib/presentation/screens/splash/widget/splash_content.dart
+index 29d8d6c..51ee71f 100644
+--- a/lib/presentation/screens/splash/widget/splash_content.dart
++++ b/lib/presentation/screens/splash/widget/splash_content.dart
+@@ -68,6 +68,7 @@ class SplashContentState extends ConsumerState<SplashContent>
+   void didChangeDependencies() {
+     ref.read(valClientProvider).run();
+     ref.read(radioClientProvider).run();
++    ref.read(mpdClientProvider).run();
+     super.didChangeDependencies();
+   }
+ 
+diff --git a/pubspec.lock b/pubspec.lock
+index f189947..f44a74e 100644
+--- a/pubspec.lock
++++ b/pubspec.lock
+@@ -89,6 +89,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "1.0.6"
++  dart_mpd:
++    dependency: "direct main"
++    description:
++      name: dart_mpd
++      sha256: dbdaef05e7cb1881911bf3a92563586e1661ce74c3c9e570645fdd75a1b8c2bc
++      url: "https://pub.dev"
++    source: hosted
++    version: "0.3.2"
+   dbus:
+     dependency: transitive
+     description:
+@@ -133,10 +141,10 @@ packages:
+     dependency: transitive
+     description:
+       name: file
+-      sha256: "5fc22d7c25582e38ad9a8515372cd9a93834027aacf1801cf01164dac0ffa08c"
++      sha256: "1b92bec4fc2a72f59a8e15af5f52cd441e4a7860b49499d69dfa817af20e925d"
+       url: "https://pub.dev"
+     source: hosted
+-    version: "7.0.0"
++    version: "6.1.4"
+   fixnum:
+     dependency: transitive
+     description:
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 8768c94..411e082 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -55,6 +55,7 @@ dependencies:
+   auto_size_text: ^3.0.0
+   get_ip_address: ^0.0.6
+   flutter_calendar_carousel: ^2.4.2
++  dart_mpd: ^0.3.2
+ 
+ dev_dependencies:
+   flutter_test:
+-- 
+2.25.1
+
