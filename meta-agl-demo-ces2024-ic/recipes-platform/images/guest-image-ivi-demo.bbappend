@@ -7,6 +7,7 @@ IMAGE_INSTALL += " \
     packagegroup-agl-demo-music-data \
     ttf-vlgothic ttf-sazanami-gothic ttf-sazanami-mincho \
     alsa-conf-guest alsa-utils psplash \
+    tzdata \
 "
 
 IMAGE_INSTALL:remove = " \
@@ -17,3 +18,4 @@ IMAGE_INSTALL:remove = " \
 
 IMAGE_FEATURES += " ssh-server-openssh"
 
+IMAGE_LINGUAS = "en-us ja-jp"
